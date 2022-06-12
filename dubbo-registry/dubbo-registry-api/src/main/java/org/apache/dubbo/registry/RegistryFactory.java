@@ -25,10 +25,12 @@ import org.apache.dubbo.common.extension.SPI;
  *
  * @see org.apache.dubbo.registry.support.AbstractRegistryFactory
  */
-@SPI("dubbo")
+@SPI("dubbo") // Dubbo 的 SPI拓展接口
 public interface RegistryFactory {
 
     /**
+     * 通过工厂模式获得 protocol 对应的 Registry 对象
+     * 使用 Dubbo 的自适应拓展机制根据 URL 中的 protocol 参数获得对应的 Registry 对象。
      * Connect to the registry
      * <p>
      * Connecting the registry needs to support the contract: <br>

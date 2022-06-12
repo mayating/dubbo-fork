@@ -29,28 +29,8 @@ import org.apache.dubbo.common.threadpool.concurrent.ScheduledCompletableFuture;
 import org.apache.dubbo.common.threadpool.manager.ExecutorRepository;
 import org.apache.dubbo.common.utils.CollectionUtils;
 import org.apache.dubbo.common.utils.StringUtils;
-import org.apache.dubbo.config.ApplicationConfig;
-import org.apache.dubbo.config.ConfigCenterConfig;
-import org.apache.dubbo.config.ConsumerConfig;
-import org.apache.dubbo.config.DubboShutdownHook;
-import org.apache.dubbo.config.MetadataReportConfig;
-import org.apache.dubbo.config.MetricsConfig;
-import org.apache.dubbo.config.ModuleConfig;
-import org.apache.dubbo.config.MonitorConfig;
-import org.apache.dubbo.config.ProtocolConfig;
-import org.apache.dubbo.config.ProviderConfig;
-import org.apache.dubbo.config.ReferenceConfig;
-import org.apache.dubbo.config.RegistryConfig;
-import org.apache.dubbo.config.ServiceConfig;
-import org.apache.dubbo.config.ServiceConfigBase;
-import org.apache.dubbo.config.SslConfig;
-import org.apache.dubbo.config.bootstrap.builders.ApplicationBuilder;
-import org.apache.dubbo.config.bootstrap.builders.ConsumerBuilder;
-import org.apache.dubbo.config.bootstrap.builders.ProtocolBuilder;
-import org.apache.dubbo.config.bootstrap.builders.ProviderBuilder;
-import org.apache.dubbo.config.bootstrap.builders.ReferenceBuilder;
-import org.apache.dubbo.config.bootstrap.builders.RegistryBuilder;
-import org.apache.dubbo.config.bootstrap.builders.ServiceBuilder;
+import org.apache.dubbo.config.*;
+import org.apache.dubbo.config.bootstrap.builders.*;
 import org.apache.dubbo.config.context.ConfigManager;
 import org.apache.dubbo.config.metadata.ConfigurableMetadataServiceExporter;
 import org.apache.dubbo.config.utils.ConfigValidationUtils;
@@ -71,12 +51,7 @@ import org.apache.dubbo.rpc.Protocol;
 import org.apache.dubbo.rpc.model.ApplicationModel;
 
 import java.io.IOException;
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Set;
-import java.util.SortedSet;
+import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Future;
@@ -100,10 +75,11 @@ import static org.apache.dubbo.registry.client.metadata.ServiceInstanceMetadataU
 import static org.apache.dubbo.remoting.Constants.CLIENT_KEY;
 
 /**
+ * 负责启动 Dubbo
  * See {@link ApplicationModel} and {@link ExtensionLoader} for why this class is designed to be singleton.
- *
+ * <p>
  * The bootstrap class of Dubbo
- *
+ * <p>
  * Get singleton instance by calling static method {@link #getInstance()}.
  * Designed as singleton because some classes inside Dubbo, such as ExtensionLoader, are designed only for one instance per process.
  *
@@ -139,7 +115,8 @@ public class DubboBootstrap extends GenericEventListener {
 
     private final EventDispatcher eventDispatcher = EventDispatcher.getDefaultExtension();
 
-    private final ExecutorRepository executorRepository = ExtensionLoader.getExtensionLoader(ExecutorRepository.class).getDefaultExtension();
+    private final ExecutorRepository executorRepository =
+            ExtensionLoader.getExtensionLoader(ExecutorRepository.class).getDefaultExtension();
 
     private final ConfigManager configManager;
 
@@ -153,6 +130,7 @@ public class DubboBootstrap extends GenericEventListener {
 
     private AtomicBoolean initialized = new AtomicBoolean(false);
 
+    // 原子Boolean
     private AtomicBoolean started = new AtomicBoolean(false);
 
     private AtomicBoolean destroyed = new AtomicBoolean(false);
@@ -497,26 +475,36 @@ public class DubboBootstrap extends GenericEventListener {
      * Initialize
      */
     private void initialize() {
+        // 已经初始化，直接return
         if (!initialized.compareAndSet(false, true)) {
             return;
         }
 
+        // 初始化 FrameworkExt
         ApplicationModel.iniFrameworkExts();
 
+        // 开启配置中心
         startConfigCenter();
 
+        // 如果有需要，将注册中心作为配置中心
         useRegistryAsConfigCenterIfNecessary();
 
+        // 开启元数据上报
         startMetadataReport();
 
+        // 加载远程配置
         loadRemoteConfigs();
 
+        // 检查全局配置
         checkGlobalConfigs();
 
+        // 初始化元数据服务
         initMetadataService();
 
+        // 初始化元数据服务暴露器
         initMetadataServiceExporter();
 
+        // 初始化事件监听器
         initEventListener();
 
         if (logger.isInfoEnabled()) {
@@ -550,17 +538,24 @@ public class DubboBootstrap extends GenericEventListener {
     }
 
     private void startConfigCenter() {
+        // 获取配置中心
         Collection<ConfigCenterConfig> configCenters = configManager.getConfigCenters();
 
         if (CollectionUtils.isNotEmpty(configCenters)) {
+            // 动态配置
             CompositeDynamicConfiguration compositeDynamicConfiguration = new CompositeDynamicConfiguration();
             for (ConfigCenterConfig configCenter : configCenters) {
+                // 刷新
                 configCenter.refresh();
+                // 校验
                 ConfigValidationUtils.validateConfigCenterConfig(configCenter);
+                // 添加
                 compositeDynamicConfiguration.addConfiguration(prepareEnvironment(configCenter));
             }
+            // 设置
             environment.setDynamicConfiguration(compositeDynamicConfiguration);
         }
+        // 刷新all
         configManager.refreshAll();
     }
 
@@ -572,7 +567,8 @@ public class DubboBootstrap extends GenericEventListener {
         Collection<MetadataReportConfig> metadataReportConfigs = configManager.getMetadataConfigs();
         if (CollectionUtils.isEmpty(metadataReportConfigs)) {
             if (REMOTE_METADATA_STORAGE_TYPE.equals(metadataType)) {
-                throw new IllegalStateException("No MetadataConfig found, you must specify the remote Metadata Center address when 'metadata=remote' is enabled.");
+                throw new IllegalStateException(
+                        "No MetadataConfig found, you must specify the remote Metadata Center address when 'metadata=remote' is enabled.");
             }
             return;
         }
@@ -694,12 +690,14 @@ public class DubboBootstrap extends GenericEventListener {
      * Start the bootstrap
      */
     public DubboBootstrap start() {
+        // 如果 started 原值是 false，则将其设置为 true。比较并设值，多线程。
         if (started.compareAndSet(false, true)) {
+            // 初始化
             initialize();
             if (logger.isInfoEnabled()) {
                 logger.info(NAME + " is starting...");
             }
-            // 1. export Dubbo Services
+            // 1. export Dubbo Services Dubbo服务暴露
             exportServices();
 
             // Not only provider register
@@ -858,18 +856,19 @@ public class DubboBootstrap extends GenericEventListener {
     }
 
     private void exportServices() {
+        // 循环配置中的 service
         configManager.getServices().forEach(sc -> {
             // TODO, compatible with ServiceConfig.export()
             ServiceConfig serviceConfig = (ServiceConfig) sc;
             serviceConfig.setBootstrap(this);
-
+            // 异步暴露
             if (exportAsync) {
                 ExecutorService executor = executorRepository.getServiceExporterExecutor();
                 Future<?> future = executor.submit(() -> {
                     sc.export();
                 });
                 asyncExportingFutures.add(future);
-            } else {
+            } else { // 调用 ServiceConfig 的 export() 方法暴露服务，并加入 Map 记录
                 sc.export();
                 exportedServices.add(sc);
             }

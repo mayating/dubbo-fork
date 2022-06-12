@@ -23,14 +23,15 @@ import org.apache.dubbo.remoting.zookeeper.ZookeeperTransporter;
 
 /**
  * ZookeeperRegistryFactory.
- *
  */
 public class ZookeeperRegistryFactory extends AbstractRegistryFactory {
 
     private ZookeeperTransporter zookeeperTransporter;
 
     /**
+     * 通过 dubbo SPI ioc 注入 zk 工厂对象
      * Invisible injection of zookeeper client via IOC/SPI
+     *
      * @param zookeeperTransporter
      */
     public void setZookeeperTransporter(ZookeeperTransporter zookeeperTransporter) {

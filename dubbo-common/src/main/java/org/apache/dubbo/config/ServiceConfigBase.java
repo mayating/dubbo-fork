@@ -300,8 +300,9 @@ public abstract class ServiceConfigBase<T> extends AbstractServiceConfig {
                 }
             });
             if (tmpProtocols.size() > arr.length) {
-                throw new IllegalStateException("Too much protocols found, the protocols comply to this service are :" + protocolIds + " but got " + protocols
-                        .size() + " registries!");
+                throw new IllegalStateException(
+                        "Too much protocols found, the protocols comply to this service are :" + protocolIds + " but got " + protocols
+                                .size() + " registries!");
             }
             setProtocols(tmpProtocols);
         }
@@ -462,6 +463,7 @@ public abstract class ServiceConfigBase<T> extends AbstractServiceConfig {
         }
     }
 
+    // 模版方法
     public abstract void export();
 
     public abstract void unexport();

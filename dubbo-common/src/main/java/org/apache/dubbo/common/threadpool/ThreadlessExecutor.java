@@ -21,18 +21,12 @@ import org.apache.dubbo.common.logger.LoggerFactory;
 
 import java.util.Collections;
 import java.util.List;
-import java.util.concurrent.AbstractExecutorService;
-import java.util.concurrent.BlockingQueue;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.LinkedBlockingQueue;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
+import java.util.concurrent.*;
 
 /**
  * The most important difference between this Executor and other normal Executor is that this one doesn't manage
- * any thread.
- *
+ * any thread. 这个Executor和其他普通的Executor最重要的区别是这个executor不管理任何线程
+ * <p>
  * Tasks submitted to this executor through {@link #execute(Runnable)} will not get scheduled to a specific thread, though normal executors always do the schedule.
  * Those tasks are stored in a blocking queue and will only be executed when a thead calls {@link #waitAndDrain()}, the thead executing the task
  * is exactly the same as the one calling waitAndDrain.

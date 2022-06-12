@@ -25,11 +25,7 @@ import org.apache.dubbo.registry.Registry;
 import org.apache.dubbo.registry.RegistryFactory;
 import org.apache.dubbo.registry.RegistryService;
 
-import java.util.Collection;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.locks.ReentrantLock;
 
@@ -51,6 +47,8 @@ public abstract class AbstractRegistryFactory implements RegistryFactory {
     private static final ReentrantLock LOCK = new ReentrantLock();
 
     // Registry Collection Map<RegistryAddress, Registry>
+    // 实现了 RegistryFactory 接口，提供了对 Registry 的容器管理
+    // REGISTRIES 存储不同的注册中心，key 为 URL toString
     private static final Map<String, Registry> REGISTRIES = new HashMap<>();
 
     private static final AtomicBoolean destroyed = new AtomicBoolean(false);
@@ -69,6 +67,7 @@ public abstract class AbstractRegistryFactory implements RegistryFactory {
     }
 
     /**
+     * 提供了销毁 Registry 的加锁实现
      * Close all created registries
      */
     public static void destroyAll() {
@@ -96,10 +95,12 @@ public abstract class AbstractRegistryFactory implements RegistryFactory {
         }
     }
 
+    // 加入缓存和锁
     @Override
     public Registry getRegistry(URL url) {
         if (destroyed.get()) {
-            LOGGER.warn("All registry instances have been destroyed, failed to fetch any instance. " +
+            LOGGER.warn("All registry instances have been destroyed, failed to fetch any instance. "
+                    +
                     "Usually, this means no need to try to do unnecessary redundant resource clearance, all registries has been taken care of.");
             return DEFAULT_NOP_REGISTRY;
         }
@@ -130,6 +131,7 @@ public abstract class AbstractRegistryFactory implements RegistryFactory {
         }
     }
 
+    // 提供了创建 Registry 的抽象方法
     protected abstract Registry createRegistry(URL url);
 
 

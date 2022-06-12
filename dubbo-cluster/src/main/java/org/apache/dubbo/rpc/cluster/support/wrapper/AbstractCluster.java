@@ -36,12 +36,15 @@ public abstract class AbstractCluster implements Cluster {
 
     private <T> Invoker<T> buildClusterInterceptors(AbstractClusterInvoker<T> clusterInvoker, String key) {
         AbstractClusterInvoker<T> last = clusterInvoker;
-        List<ClusterInterceptor> interceptors = ExtensionLoader.getExtensionLoader(ClusterInterceptor.class).getActivateExtension(clusterInvoker.getUrl(), key);
+        // 获取被激活的扩展点实例，key 为 url 中携带的扩展点名称
+        List<ClusterInterceptor> interceptors =
+                ExtensionLoader.getExtensionLoader(ClusterInterceptor.class).getActivateExtension(clusterInvoker.getUrl(), key);
 
         if (!interceptors.isEmpty()) {
             for (int i = interceptors.size() - 1; i >= 0; i--) {
                 final ClusterInterceptor interceptor = interceptors.get(i);
                 final AbstractClusterInvoker<T> next = last;
+                // 集结了 Invoker 和 Interceptor 属性
                 last = new InterceptorInvokerNode<>(clusterInvoker, interceptor, next);
             }
         }
@@ -50,6 +53,8 @@ public abstract class AbstractCluster implements Cluster {
 
     @Override
     public <T> Invoker<T> join(Directory<T> directory) throws RpcException {
+        // 构建 cluster 拦截器，从 url 中获取 key 为 reference.interceptor 的值
+        // doJoin 模版方法
         return buildClusterInterceptors(doJoin(directory), directory.getUrl().getParameter(REFERENCE_INTERCEPTOR_KEY));
     }
 

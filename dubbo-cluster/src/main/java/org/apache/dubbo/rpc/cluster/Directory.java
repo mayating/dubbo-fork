@@ -40,6 +40,7 @@ public interface Directory<T> extends Node {
     Class<T> getInterface();
 
     /**
+     * 列举 Invokers
      * list invokers.
      *
      * @return invokers

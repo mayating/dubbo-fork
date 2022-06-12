@@ -23,11 +23,7 @@ import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.regex.Matcher;
@@ -38,7 +34,7 @@ import java.util.regex.Matcher;
 public abstract class Wrapper {
     private static final Map<Class<?>, Wrapper> WRAPPER_MAP = new ConcurrentHashMap<Class<?>, Wrapper>(); //class wrapper map
     private static final String[] EMPTY_STRING_ARRAY = new String[0];
-    private static final String[] OBJECT_METHODS = new String[]{"getClass", "hashCode", "toString", "equals"};
+    private static final String[] OBJECT_METHODS = new String[] {"getClass", "hashCode", "toString", "equals"};
     private static final Wrapper OBJECT_WRAPPER = new Wrapper() {
         @Override
         public String[] getMethodNames() {
@@ -116,6 +112,7 @@ public abstract class Wrapper {
         return WRAPPER_MAP.computeIfAbsent(c, key -> makeWrapper(key));
     }
 
+    // 基于 Javassit 封装的 ClassGenerator 类
     private static Wrapper makeWrapper(Class<?> c) {
         if (c.isPrimitive()) {
             throw new IllegalArgumentException("Can not create wrapper for primitive type: " + c);
@@ -126,11 +123,15 @@ public abstract class Wrapper {
 
         StringBuilder c1 = new StringBuilder("public void setPropertyValue(Object o, String n, Object v){ ");
         StringBuilder c2 = new StringBuilder("public Object getPropertyValue(Object o, String n){ ");
-        StringBuilder c3 = new StringBuilder("public Object invokeMethod(Object o, String n, Class[] p, Object[] v) throws " + InvocationTargetException.class.getName() + "{ ");
+        StringBuilder c3 = new StringBuilder("public Object invokeMethod(Object o, String n, Class[] p, Object[] v) throws " +
+                InvocationTargetException.class.getName() + "{ ");
 
-        c1.append(name).append(" w; try{ w = ((").append(name).append(")$1); }catch(Throwable e){ throw new IllegalArgumentException(e); }");
-        c2.append(name).append(" w; try{ w = ((").append(name).append(")$1); }catch(Throwable e){ throw new IllegalArgumentException(e); }");
-        c3.append(name).append(" w; try{ w = ((").append(name).append(")$1); }catch(Throwable e){ throw new IllegalArgumentException(e); }");
+        c1.append(name).append(" w; try{ w = ((").append(name)
+                .append(")$1); }catch(Throwable e){ throw new IllegalArgumentException(e); }");
+        c2.append(name).append(" w; try{ w = ((").append(name)
+                .append(")$1); }catch(Throwable e){ throw new IllegalArgumentException(e); }");
+        c3.append(name).append(" w; try{ w = ((").append(name)
+                .append(")$1); }catch(Throwable e){ throw new IllegalArgumentException(e); }");
 
         Map<String, Class<?>> pts = new HashMap<>(); // <property name, property types>
         Map<String, Method> ms = new LinkedHashMap<>(); // <method desc, Method instance>
@@ -145,7 +146,8 @@ public abstract class Wrapper {
                 continue;
             }
 
-            c1.append(" if( $2.equals(\"").append(fn).append("\") ){ w.").append(fn).append("=").append(arg(ft, "$3")).append("; return; }");
+            c1.append(" if( $2.equals(\"").append(fn).append("\") ){ w.").append(fn).append("=").append(arg(ft, "$3"))
+                    .append("; return; }");
             c2.append(" if( $2.equals(\"").append(fn).append("\") ){ return ($w)w.").append(fn).append("; }");
             pts.put(fn, ft);
         }
@@ -203,7 +205,8 @@ public abstract class Wrapper {
             c3.append(" }");
         }
 
-        c3.append(" throw new " + NoSuchMethodException.class.getName() + "(\"Not found method \\\"\"+$2+\"\\\" in class " + c.getName() + ".\"); }");
+        c3.append(" throw new " + NoSuchMethodException.class.getName() + "(\"Not found method \\\"\"+$2+\"\\\" in class " + c.getName() +
+                ".\"); }");
 
         // deal with get/set method.
         Matcher matcher;
@@ -221,12 +224,15 @@ public abstract class Wrapper {
             } else if ((matcher = ReflectUtils.SETTER_METHOD_DESC_PATTERN.matcher(md)).matches()) {
                 Class<?> pt = method.getParameterTypes()[0];
                 String pn = propertyName(matcher.group(1));
-                c1.append(" if( $2.equals(\"").append(pn).append("\") ){ w.").append(method.getName()).append("(").append(arg(pt, "$3")).append("); return; }");
+                c1.append(" if( $2.equals(\"").append(pn).append("\") ){ w.").append(method.getName()).append("(").append(arg(pt, "$3"))
+                        .append("); return; }");
                 pts.put(pn, pt);
             }
         }
-        c1.append(" throw new " + NoSuchPropertyException.class.getName() + "(\"Not found property \\\"\"+$2+\"\\\" field or setter method in class " + c.getName() + ".\"); }");
-        c2.append(" throw new " + NoSuchPropertyException.class.getName() + "(\"Not found property \\\"\"+$2+\"\\\" field or setter method in class " + c.getName() + ".\"); }");
+        c1.append(" throw new " + NoSuchPropertyException.class.getName() +
+                "(\"Not found property \\\"\"+$2+\"\\\" field or setter method in class " + c.getName() + ".\"); }");
+        c2.append(" throw new " + NoSuchPropertyException.class.getName() +
+                "(\"Not found property \\\"\"+$2+\"\\\" field or setter method in class " + c.getName() + ".\"); }");
 
         // make class
         long id = WRAPPER_CLASS_COUNTER.getAndIncrement();
@@ -263,6 +269,7 @@ public abstract class Wrapper {
             for (Method m : ms.values()) {
                 wc.getField("mts" + ix++).set(null, m.getParameterTypes());
             }
+            // 实例化
             return (Wrapper) wc.newInstance();
         } catch (RuntimeException e) {
             throw e;
@@ -449,5 +456,6 @@ public abstract class Wrapper {
      * @param args     argument array.
      * @return return value.
      */
-    abstract public Object invokeMethod(Object instance, String mn, Class<?>[] types, Object[] args) throws NoSuchMethodException, InvocationTargetException;
+    abstract public Object invokeMethod(Object instance, String mn, Class<?>[] types, Object[] args)
+            throws NoSuchMethodException, InvocationTargetException;
 }

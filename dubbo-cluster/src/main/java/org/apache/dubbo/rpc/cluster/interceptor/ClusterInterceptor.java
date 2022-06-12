@@ -29,8 +29,10 @@ import org.apache.dubbo.rpc.cluster.support.AbstractClusterInvoker;
 @SPI
 public interface ClusterInterceptor {
 
+    // 拦截前处理
     void before(AbstractClusterInvoker<?> clusterInvoker, Invocation invocation);
 
+    // 拦截后处理
     void after(AbstractClusterInvoker<?> clusterInvoker, Invocation invocation);
 
     /**
@@ -47,10 +49,13 @@ public interface ClusterInterceptor {
         return clusterInvoker.invoke(invocation);
     }
 
+    // 监听接口
     interface Listener {
 
+        // 消息
         void onMessage(Result appResponse, AbstractClusterInvoker<?> clusterInvoker, Invocation invocation);
 
+        // 错误
         void onError(Throwable t, AbstractClusterInvoker<?> clusterInvoker, Invocation invocation);
     }
 }

@@ -19,7 +19,6 @@ package org.apache.dubbo.config.spring.context.annotation;
 import org.apache.dubbo.config.AbstractConfig;
 import org.apache.dubbo.config.spring.beans.factory.annotation.DubboConfigAliasPostProcessor;
 import org.apache.dubbo.config.spring.context.config.NamePropertyDefaultValueDubboConfigBeanCustomizer;
-
 import org.springframework.beans.factory.support.BeanDefinitionRegistry;
 import org.springframework.context.annotation.ImportBeanDefinitionRegistrar;
 import org.springframework.core.Ordered;
@@ -48,17 +47,18 @@ public class DubboConfigConfigurationRegistrar implements ImportBeanDefinitionRe
 
         boolean multiple = attributes.getBoolean("multiple");
 
-        // Single Config Bindings
+        // 单一绑定配置
         registerBeans(registry, DubboConfigConfiguration.Single.class);
 
+        // 多个实例绑定配置
         if (multiple) { // Since 2.6.6 https://github.com/apache/dubbo/issues/3193
             registerBeans(registry, DubboConfigConfiguration.Multiple.class);
         }
 
-        // Register DubboConfigAliasPostProcessor
+        // Register DubboConfigAliasPostProcessor   注册 DubboConfigAliasPostProcessor 后置处理器
         registerDubboConfigAliasPostProcessor(registry);
 
-        // Register NamePropertyDefaultValueDubboConfigBeanCustomizer
+        // Register NamePropertyDefaultValueDubboConfigBeanCustomizer   注册 NamePropertyDefaultValueDubboConfigBeanCustomizer
         registerDubboConfigBeanCustomizers(registry);
 
     }

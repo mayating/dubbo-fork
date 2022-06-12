@@ -16,21 +16,10 @@
  */
 package org.apache.dubbo.config.spring;
 
-import org.apache.dubbo.config.ApplicationConfig;
-import org.apache.dubbo.config.ConsumerConfig;
-import org.apache.dubbo.config.MetadataReportConfig;
-import org.apache.dubbo.config.MetricsConfig;
-import org.apache.dubbo.config.ModuleConfig;
-import org.apache.dubbo.config.MonitorConfig;
-import org.apache.dubbo.config.ProtocolConfig;
-import org.apache.dubbo.config.ProviderConfig;
-import org.apache.dubbo.config.ReferenceConfig;
-import org.apache.dubbo.config.RegistryConfig;
-import org.apache.dubbo.config.SslConfig;
+import org.apache.dubbo.config.*;
 import org.apache.dubbo.config.annotation.Reference;
 import org.apache.dubbo.config.spring.extension.SpringExtensionFactory;
 import org.apache.dubbo.config.support.Parameter;
-
 import org.springframework.beans.factory.DisposableBean;
 import org.springframework.beans.factory.FactoryBean;
 import org.springframework.beans.factory.InitializingBean;
@@ -63,8 +52,10 @@ public class ReferenceBean<T> extends ReferenceConfig<T> implements FactoryBean,
         SpringExtensionFactory.addApplicationContext(applicationContext);
     }
 
+    // FactoryBean  返回 bean 的实例
     @Override
     public Object getObject() {
+        // 调用 ReferenceConfig 的 get 方法获取 bean 实例
         return get();
     }
 
@@ -96,19 +87,23 @@ public class ReferenceBean<T> extends ReferenceConfig<T> implements FactoryBean,
         beansOfTypeIncludingAncestors(applicationContext, SslConfig.class);
     }
 
+    // InitializingBean
     @Override
     @SuppressWarnings({"unchecked"})
     public void afterPropertiesSet() throws Exception {
 
         // Initializes Dubbo's Config Beans before @Reference bean autowiring
+        // 初始化 Dubbo config bean
         prepareDubboConfigBeans();
 
         // lazy init by default.
+        // 默认懒加载
         if (init == null) {
             init = false;
         }
 
         // eager init if necessary.
+        // 有必要可以提前加载
         if (shouldInit()) {
             getObject();
         }

@@ -21,11 +21,7 @@ import org.apache.dubbo.common.logger.Logger;
 import org.apache.dubbo.common.logger.LoggerFactory;
 import org.apache.dubbo.common.utils.NetUtils;
 import org.apache.dubbo.common.utils.StringUtils;
-import org.apache.dubbo.remoting.Channel;
-import org.apache.dubbo.remoting.ChannelHandler;
-import org.apache.dubbo.remoting.Constants;
-import org.apache.dubbo.remoting.ExecutionException;
-import org.apache.dubbo.remoting.RemotingException;
+import org.apache.dubbo.remoting.*;
 import org.apache.dubbo.remoting.exchange.ExchangeChannel;
 import org.apache.dubbo.remoting.exchange.ExchangeHandler;
 import org.apache.dubbo.remoting.exchange.Request;
@@ -101,12 +97,15 @@ public class HeaderExchangeHandler implements ChannelHandlerDelegate {
             future.whenComplete((appResult, t) -> {
                 try {
                     if (t == null) {
+                        // 没有异常
                         res.setStatus(Response.OK);
                         res.setResult(appResult);
                     } else {
+                        // 有异常
                         res.setStatus(Response.SERVICE_ERROR);
                         res.setErrorMessage(StringUtils.toString(t));
                     }
+                    // channel发送
                     channel.send(res);
                 } catch (RemotingException e) {
                     logger.warn("Send result to consumer failed, channel is " + channel + ", msg is " + e);
@@ -164,14 +163,17 @@ public class HeaderExchangeHandler implements ChannelHandlerDelegate {
 
     @Override
     public void received(Channel channel, Object message) throws RemotingException {
+        // 交换通道
         final ExchangeChannel exchangeChannel = HeaderExchangeChannel.getOrAddChannel(channel);
         if (message instanceof Request) {
             // handle request.
             Request request = (Request) message;
             if (request.isEvent()) {
+                // 请求事件
                 handlerEvent(channel, request);
             } else {
                 if (request.isTwoWay()) {
+                    // twoway 模式
                     handleRequest(exchangeChannel, request);
                 } else {
                     handler.received(exchangeChannel, request.getData());
@@ -181,7 +183,9 @@ public class HeaderExchangeHandler implements ChannelHandlerDelegate {
             handleResponse(channel, (Response) message);
         } else if (message instanceof String) {
             if (isClientSide(channel)) {
-                Exception e = new Exception("Dubbo client can not supported string message: " + message + " in channel: " + channel + ", url: " + channel.getUrl());
+                Exception e = new Exception(
+                        "Dubbo client can not supported string message: " + message + " in channel: " + channel + ", url: " +
+                                channel.getUrl());
                 logger.error(e.getMessage(), e);
             } else {
                 String echo = handler.telnet(channel, (String) message);

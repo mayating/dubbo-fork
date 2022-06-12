@@ -17,6 +17,7 @@
 package org.apache.dubbo.common;
 
 /**
+ * 获取节点路径、判断节点是否可用、销毁节点
  * Node. (API/SPI, Prototype, ThreadSafe)
  */
 public interface Node {

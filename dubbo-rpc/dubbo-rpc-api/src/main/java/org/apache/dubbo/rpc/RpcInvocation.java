@@ -33,12 +33,7 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.stream.Stream;
 
-import static org.apache.dubbo.common.constants.CommonConstants.APPLICATION_KEY;
-import static org.apache.dubbo.common.constants.CommonConstants.GROUP_KEY;
-import static org.apache.dubbo.common.constants.CommonConstants.INTERFACE_KEY;
-import static org.apache.dubbo.common.constants.CommonConstants.PATH_KEY;
-import static org.apache.dubbo.common.constants.CommonConstants.TIMEOUT_KEY;
-import static org.apache.dubbo.common.constants.CommonConstants.VERSION_KEY;
+import static org.apache.dubbo.common.constants.CommonConstants.*;
 import static org.apache.dubbo.rpc.Constants.TOKEN_KEY;
 
 /**
@@ -62,6 +57,7 @@ public class RpcInvocation implements Invocation, Serializable {
     private Object[] arguments;
 
     /**
+     * 在 RPC 调用期间传递给远程服务器
      * Passed to the remote server during RPC call
      */
     private Map<String, String> attachments;
@@ -121,7 +117,8 @@ public class RpcInvocation implements Invocation, Serializable {
         this(method, serviceName, arguments, null, null);
     }
 
-    public RpcInvocation(Method method, String serviceName, Object[] arguments, Map<String, String> attachment, Map<Object, Object> attributes) {
+    public RpcInvocation(Method method, String serviceName, Object[] arguments, Map<String, String> attachment,
+                         Map<Object, Object> attributes) {
         this(method.getName(), serviceName, method.getParameterTypes(), arguments, attachment, null, attributes);
         this.returnType = method.getReturnType();
     }
@@ -130,7 +127,8 @@ public class RpcInvocation implements Invocation, Serializable {
         this(methodName, serviceName, parameterTypes, arguments, null, null, null);
     }
 
-    public RpcInvocation(String methodName, String serviceName, Class<?>[] parameterTypes, Object[] arguments, Map<String, String> attachments) {
+    public RpcInvocation(String methodName, String serviceName, Class<?>[] parameterTypes, Object[] arguments,
+                         Map<String, String> attachments) {
         this(methodName, serviceName, parameterTypes, arguments, attachments, null, null);
     }
 

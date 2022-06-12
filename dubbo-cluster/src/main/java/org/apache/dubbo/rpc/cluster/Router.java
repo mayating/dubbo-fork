@@ -43,6 +43,7 @@ public interface Router extends Comparable<Router> {
     URL getUrl();
 
     /**
+     * 过滤当前路由规则的 invokers，只返回符合规则的 invokers
      * Filter invokers with current routing rule and only return the invokers that comply with the rule.
      *
      * @param invokers   invoker list

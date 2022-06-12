@@ -26,6 +26,7 @@ import org.springframework.context.event.ApplicationContextEvent;
 import java.util.Objects;
 
 /**
+ * 应用监听器
  * The abstract class {@link ApplicationListener} for {@link ApplicationContextEvent} guarantees just one-time execution
  * and prevents the event propagation in the hierarchical {@link ApplicationContext ApplicationContexts}
  *
@@ -35,13 +36,16 @@ abstract class OneTimeExecutionApplicationContextEventListener implements Applic
 
     private ApplicationContext applicationContext;
 
+    // ApplicationListener  方法重写
     public final void onApplicationEvent(ApplicationEvent event) {
+        // 匹配应用上下文事件，进入模版方法，响应事件处理
         if (isOriginalEventSource(event) && event instanceof ApplicationContextEvent) {
             onApplicationContextEvent((ApplicationContextEvent) event);
         }
     }
 
     /**
+     * 模版方法实现对事件的处理
      * The subclass overrides this method to handle {@link ApplicationContextEvent}
      *
      * @param event {@link ApplicationContextEvent}
@@ -60,6 +64,7 @@ abstract class OneTimeExecutionApplicationContextEventListener implements Applic
                 || Objects.equals(applicationContext, event.getSource());
     }
 
+    // ApplicationContextAware 方法重写
     @Override
     public final void setApplicationContext(ApplicationContext applicationContext) throws BeansException {
         this.applicationContext = applicationContext;

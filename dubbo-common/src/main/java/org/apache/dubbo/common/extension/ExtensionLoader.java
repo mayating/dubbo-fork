@@ -21,45 +21,26 @@ import org.apache.dubbo.common.context.Lifecycle;
 import org.apache.dubbo.common.extension.support.ActivateComparator;
 import org.apache.dubbo.common.logger.Logger;
 import org.apache.dubbo.common.logger.LoggerFactory;
-import org.apache.dubbo.common.utils.ArrayUtils;
-import org.apache.dubbo.common.utils.ClassUtils;
-import org.apache.dubbo.common.utils.CollectionUtils;
-import org.apache.dubbo.common.utils.ConcurrentHashSet;
-import org.apache.dubbo.common.utils.ConfigUtils;
-import org.apache.dubbo.common.utils.Holder;
-import org.apache.dubbo.common.utils.ReflectUtils;
-import org.apache.dubbo.common.utils.StringUtils;
+import org.apache.dubbo.common.utils.*;
 
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
 import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.Enumeration;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.TreeSet;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.regex.Pattern;
 
-import static org.apache.dubbo.common.constants.CommonConstants.COMMA_SPLIT_PATTERN;
-import static org.apache.dubbo.common.constants.CommonConstants.DEFAULT_KEY;
-import static org.apache.dubbo.common.constants.CommonConstants.REMOVE_VALUE_PREFIX;
+import static org.apache.dubbo.common.constants.CommonConstants.*;
 
 /**
- *
  * {@link org.apache.dubbo.rpc.model.ApplicationModel}, {@code DubboBootstrap} and this class are
  * at present designed to be singleton or static (by itself totally static or uses some static fields).
  * So the instances returned from them are of process or classloader scope. If you want to support
  * multiple dubbo servers in a single process, you may need to refactor these three classes.
- *
+ * <p>
  * Load dubbo extensions
  * <ul>
  * <li>auto inject dependency extension </li>
@@ -109,7 +90,8 @@ public class ExtensionLoader<T> {
 
     private ExtensionLoader(Class<?> type) {
         this.type = type;
-        objectFactory = (type == ExtensionFactory.class ? null : ExtensionLoader.getExtensionLoader(ExtensionFactory.class).getAdaptiveExtension());
+        objectFactory =
+                (type == ExtensionFactory.class ? null : ExtensionLoader.getExtensionLoader(ExtensionFactory.class).getAdaptiveExtension());
     }
 
     private static <T> boolean withExtensionAnnotation(Class<T> type) {
@@ -404,7 +386,7 @@ public class ExtensionLoader<T> {
      * @return non-null
      */
     public T getOrDefaultExtension(String name) {
-        return containsExtension(name)  ? getExtension(name) : getDefaultExtension();
+        return containsExtension(name) ? getExtension(name) : getDefaultExtension();
     }
 
     /**
@@ -537,8 +519,8 @@ public class ExtensionLoader<T> {
         Object instance = cachedAdaptiveInstance.get();
         if (instance == null) {
             if (createAdaptiveInstanceError != null) {
-                throw new IllegalStateException("Failed to create adaptive instance: " +
-                        createAdaptiveInstanceError.toString(),
+                throw new IllegalStateException("Failed to create adaptive instance: "
+                        + createAdaptiveInstanceError.toString(),
                         createAdaptiveInstanceError);
             }
 
@@ -712,7 +694,7 @@ public class ExtensionLoader<T> {
 
     /**
      * synchronized in getExtensionClasses
-     * */
+     */
     private Map<String, Class<?>> loadExtensionClasses() {
         cacheDefaultExtensionName();
 
@@ -759,7 +741,7 @@ public class ExtensionLoader<T> {
         try {
             Enumeration<java.net.URL> urls = null;
             ClassLoader classLoader = findClassLoader();
-            
+
             // try to load from ExtensionLoader's ClassLoader first
             if (extensionLoaderClassLoaderFirst) {
                 ClassLoader extensionLoaderClassLoader = ExtensionLoader.class.getClassLoader();
@@ -767,8 +749,8 @@ public class ExtensionLoader<T> {
                     urls = extensionLoaderClassLoader.getResources(fileName);
                 }
             }
-            
-            if(urls == null || !urls.hasMoreElements()) {
+
+            if (urls == null || !urls.hasMoreElements()) {
                 if (classLoader != null) {
                     urls = classLoader.getResources(fileName);
                 } else {
@@ -810,7 +792,9 @@ public class ExtensionLoader<T> {
                                 loadClass(extensionClasses, resourceURL, Class.forName(line, true, classLoader), name);
                             }
                         } catch (Throwable t) {
-                            IllegalStateException e = new IllegalStateException("Failed to load extension class (interface: " + type + ", class line: " + line + ") in " + resourceURL + ", cause: " + t.getMessage(), t);
+                            IllegalStateException e = new IllegalStateException(
+                                    "Failed to load extension class (interface: " + type + ", class line: " + line + ") in " + resourceURL +
+                                            ", cause: " + t.getMessage(), t);
                             exceptions.put(line, e);
                         }
                     }
@@ -822,7 +806,8 @@ public class ExtensionLoader<T> {
         }
     }
 
-    private void loadClass(Map<String, Class<?>> extensionClasses, java.net.URL resourceURL, Class<?> clazz, String name) throws NoSuchMethodException {
+    private void loadClass(Map<String, Class<?>> extensionClasses, java.net.URL resourceURL, Class<?> clazz, String name)
+            throws NoSuchMethodException {
         if (!type.isAssignableFrom(clazz)) {
             throw new IllegalStateException("Error occurred when loading extension class (interface: " +
                     type + ", class line: " + clazz.getName() + "), class "
@@ -837,7 +822,8 @@ public class ExtensionLoader<T> {
             if (StringUtils.isEmpty(name)) {
                 name = findAnnotationName(clazz);
                 if (name.length() == 0) {
-                    throw new IllegalStateException("No such extension name for the class " + clazz.getName() + " in the config " + resourceURL);
+                    throw new IllegalStateException(
+                            "No such extension name for the class " + clazz.getName() + " in the config " + resourceURL);
                 }
             }
 
@@ -869,7 +855,8 @@ public class ExtensionLoader<T> {
         if (c == null) {
             extensionClasses.put(name, clazz);
         } else if (c != clazz) {
-            String duplicateMsg = "Duplicate extension " + type.getName() + " name " + name + " on " + c.getName() + " and " + clazz.getName();
+            String duplicateMsg =
+                    "Duplicate extension " + type.getName() + " name " + name + " on " + c.getName() + " and " + clazz.getName();
             logger.error(duplicateMsg);
             throw new IllegalStateException(duplicateMsg);
         }
@@ -886,7 +873,8 @@ public class ExtensionLoader<T> {
             cachedActivates.put(name, activate);
         } else {
             // support com.alibaba.dubbo.common.extension.Activate
-            com.alibaba.dubbo.common.extension.Activate oldActivate = clazz.getAnnotation(com.alibaba.dubbo.common.extension.Activate.class);
+            com.alibaba.dubbo.common.extension.Activate oldActivate =
+                    clazz.getAnnotation(com.alibaba.dubbo.common.extension.Activate.class);
             if (oldActivate != null) {
                 cachedActivates.put(name, oldActivate);
             }
@@ -966,7 +954,8 @@ public class ExtensionLoader<T> {
     private Class<?> createAdaptiveExtensionClass() {
         String code = new AdaptiveClassCodeGenerator(type, cachedDefaultName).generate();
         ClassLoader classLoader = findClassLoader();
-        org.apache.dubbo.common.compiler.Compiler compiler = ExtensionLoader.getExtensionLoader(org.apache.dubbo.common.compiler.Compiler.class).getAdaptiveExtension();
+        org.apache.dubbo.common.compiler.Compiler compiler =
+                ExtensionLoader.getExtensionLoader(org.apache.dubbo.common.compiler.Compiler.class).getAdaptiveExtension();
         return compiler.compile(code, classLoader);
     }
 

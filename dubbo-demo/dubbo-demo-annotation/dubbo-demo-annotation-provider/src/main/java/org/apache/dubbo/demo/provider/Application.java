@@ -20,7 +20,6 @@ package org.apache.dubbo.demo.provider;
 
 import org.apache.dubbo.config.RegistryConfig;
 import org.apache.dubbo.config.spring.context.annotation.EnableDubbo;
-
 import org.springframework.context.annotation.AnnotationConfigApplicationContext;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -34,8 +33,8 @@ public class Application {
     }
 
     @Configuration
-    @EnableDubbo(scanBasePackages = "org.apache.dubbo.demo.provider")
-    @PropertySource("classpath:/spring/dubbo-provider.properties")
+    @EnableDubbo(scanBasePackages = "org.apache.dubbo.demo.provider") // 对指定包下的类进行扫描，扫描@Service与@Reference注解并处理
+    @PropertySource("classpath:/spring/dubbo-provider.properties") // 将dubbo-provider.properties中的配置项添加到Spring容器中，可通过@Value方式获得配置项的值
     static class ProviderConfiguration {
         @Bean
         public RegistryConfig registryConfig() {

@@ -22,11 +22,7 @@ import org.apache.dubbo.common.bytecode.Wrapper;
 import org.apache.dubbo.common.extension.ExtensionLoader;
 import org.apache.dubbo.common.logger.Logger;
 import org.apache.dubbo.common.logger.LoggerFactory;
-import org.apache.dubbo.common.utils.CollectionUtils;
-import org.apache.dubbo.common.utils.ConfigUtils;
-import org.apache.dubbo.common.utils.NetUtils;
-import org.apache.dubbo.common.utils.StringUtils;
-import org.apache.dubbo.common.utils.UrlUtils;
+import org.apache.dubbo.common.utils.*;
 import org.apache.dubbo.config.annotation.Reference;
 import org.apache.dubbo.config.bootstrap.DubboBootstrap;
 import org.apache.dubbo.config.event.ReferenceConfigDestroyedEvent;
@@ -50,27 +46,9 @@ import org.apache.dubbo.rpc.protocol.injvm.InjvmProtocol;
 import org.apache.dubbo.rpc.service.GenericService;
 import org.apache.dubbo.rpc.support.ProtocolUtils;
 
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
-import static org.apache.dubbo.common.constants.CommonConstants.ANY_VALUE;
-import static org.apache.dubbo.common.constants.CommonConstants.CLUSTER_KEY;
-import static org.apache.dubbo.common.constants.CommonConstants.COMMA_SEPARATOR;
-import static org.apache.dubbo.common.constants.CommonConstants.CONSUMER_SIDE;
-import static org.apache.dubbo.common.constants.CommonConstants.DEFAULT_METADATA_STORAGE_TYPE;
-import static org.apache.dubbo.common.constants.CommonConstants.INTERFACE_KEY;
-import static org.apache.dubbo.common.constants.CommonConstants.LOCALHOST_VALUE;
-import static org.apache.dubbo.common.constants.CommonConstants.METADATA_KEY;
-import static org.apache.dubbo.common.constants.CommonConstants.METHODS_KEY;
-import static org.apache.dubbo.common.constants.CommonConstants.MONITOR_KEY;
-import static org.apache.dubbo.common.constants.CommonConstants.PROXY_CLASS_REF;
-import static org.apache.dubbo.common.constants.CommonConstants.REVISION_KEY;
-import static org.apache.dubbo.common.constants.CommonConstants.SEMICOLON_SPLIT_PATTERN;
-import static org.apache.dubbo.common.constants.CommonConstants.SIDE_KEY;
+import static org.apache.dubbo.common.constants.CommonConstants.*;
 import static org.apache.dubbo.common.utils.NetUtils.isInvalidLocalHost;
 import static org.apache.dubbo.config.Constants.DUBBO_IP_TO_REGISTRY;
 import static org.apache.dubbo.registry.Constants.CONSUMER_PROTOCOL;
@@ -147,7 +125,9 @@ public class ReferenceConfig<T> extends ReferenceConfigBase<T> {
         if (destroyed) {
             throw new IllegalStateException("The invoker of ReferenceConfig(" + url + ") has already destroyed!");
         }
+        // 若服务引用代理为空，执行 init 方法
         if (ref == null) {
+            // 处理配置，调用 createProxy 生成代理类
             init();
         }
         return ref;
@@ -174,15 +154,18 @@ public class ReferenceConfig<T> extends ReferenceConfigBase<T> {
     }
 
     public synchronized void init() {
+        // 标记是否已经初始化，避免重复初始化
         if (initialized) {
             return;
         }
 
+        // 获取 DubboBootstrap 引导类实例
         if (bootstrap == null) {
             bootstrap = DubboBootstrap.getInstance();
             bootstrap.init();
         }
 
+        // 检查接口、consumer 等配置是否合法，并对相应的配置赋值
         checkAndUpdateSubConfigs();
 
         //init serivceMetadata
@@ -194,19 +177,24 @@ public class ReferenceConfig<T> extends ReferenceConfigBase<T> {
         // TODO, uncomment this line once service key is unified
         serviceMetadata.setServiceKey(URL.buildKey(interfaceName, group, version));
 
+        // 本地存根检查
         checkStubAndLocal(interfaceClass);
         ConfigValidationUtils.checkMock(interfaceClass, this);
 
         Map<String, String> map = new HashMap<String, String>();
         map.put(SIDE_KEY, CONSUMER_SIDE);
 
+        // 加入运行时参数，Dubbo 版本号、时间戳、进程号等
         ReferenceConfigBase.appendRuntimeParameters(map);
+        // 是否为泛化接口
         if (!ProtocolUtils.isGeneric(generic)) {
+            // 版本号
             String revision = Version.getVersion(interfaceClass, version);
             if (revision != null && revision.length() > 0) {
                 map.put(REVISION_KEY, revision);
             }
 
+            // 获取接口的方法列表，加入 map
             String[] methods = Wrapper.getWrapper(interfaceClass).getMethodNames();
             if (methods.length == 0) {
                 logger.warn("No method found in service interface " + interfaceClass.getName());
@@ -216,6 +204,7 @@ public class ReferenceConfig<T> extends ReferenceConfigBase<T> {
             }
         }
         map.put(INTERFACE_KEY, interfaceName);
+        // 将 ApplicationConfig、ConsumerConfig、ReferenceConfig 等对象的字段信息添加到 map 中
         AbstractConfig.appendParameters(map, getMetrics());
         AbstractConfig.appendParameters(map, getApplication());
         AbstractConfig.appendParameters(map, getModule());
@@ -243,14 +232,17 @@ public class ReferenceConfig<T> extends ReferenceConfigBase<T> {
             }
         }
 
+        // 从系统变量中获取服务消费者 ip
         String hostToRegistry = ConfigUtils.getSystemProperty(DUBBO_IP_TO_REGISTRY);
         if (StringUtils.isEmpty(hostToRegistry)) {
             hostToRegistry = NetUtils.getLocalHost();
         } else if (isInvalidLocalHost(hostToRegistry)) {
-            throw new IllegalArgumentException("Specified invalid registry ip from property:" + DUBBO_IP_TO_REGISTRY + ", value:" + hostToRegistry);
+            throw new IllegalArgumentException(
+                    "Specified invalid registry ip from property:" + DUBBO_IP_TO_REGISTRY + ", value:" + hostToRegistry);
         }
         map.put(REGISTER_IP_KEY, hostToRegistry);
 
+        // 存储配置数据
         serviceMetadata.getAttachments().putAll(map);
 
         ServiceRepository repository = ApplicationModel.getServiceRepository();
@@ -263,78 +255,105 @@ public class ReferenceConfig<T> extends ReferenceConfigBase<T> {
                 null,
                 serviceMetadata);
 
+        // 创建代理
         ref = createProxy(map);
 
         serviceMetadata.setTarget(ref);
         serviceMetadata.addAttribute(PROXY_CLASS_REF, ref);
         repository.lookupReferredService(serviceMetadata.getServiceKey()).setProxyObject(ref);
 
+        // 标记为已初始化
         initialized = true;
 
         // dispatch a ReferenceConfigInitializedEvent since 2.7.4
+        // 发布 ReferenceConfigInitializedEvent 事件
         dispatch(new ReferenceConfigInitializedEvent(this, invoker));
     }
 
     @SuppressWarnings({"unchecked", "rawtypes", "deprecation"})
     private T createProxy(Map<String, String> map) {
-        if (shouldJvmRefer(map)) {
+        // 判断是否本地引用，包含指定服务 url 直连的情况判断、或根据参数配置是否进行本地暴露，如协议、scope、injvm 等
+        if (shouldJvmRefer(map)) { // 本地引用
+            // 创建 URL，协议为 injvm
             URL url = new URL(LOCAL_PROTOCOL, LOCALHOST_VALUE, 0, interfaceClass.getName()).addParameters(map);
+            // 调用 refer 方法创建 InjvmInvoker 实例
             invoker = REF_PROTOCOL.refer(interfaceClass, url);
             if (logger.isInfoEnabled()) {
                 logger.info("Using injvm service " + interfaceClass.getName());
             }
+            // 远程引用
         } else {
             urls.clear();
+            // 若 url 不为空
             if (url != null && url.length() > 0) { // user specified URL, could be peer-to-peer address, or register center's address.
+                // 配置多个 url 时，用分号分隔
                 String[] us = SEMICOLON_SPLIT_PATTERN.split(url);
                 if (us != null && us.length > 0) {
                     for (String u : us) {
                         URL url = URL.valueOf(u);
                         if (StringUtils.isEmpty(url.getPath())) {
+                            // 设置 url 路径为接口全限定名
                             url = url.setPath(interfaceName);
                         }
+                        // 协议为 registry 时，指定注册中心
                         if (UrlUtils.isRegistry(url)) {
+                            // 将 map 转换为查询字符串，赋值给 refer
                             urls.add(url.addParameterAndEncoded(REFER_KEY, StringUtils.toQueryString(map)));
                         } else {
+                            // 合并url,移除服务提供者的一些配置（这些配置来源于用户配置的 url 属性），比如线程池相关配置。
+                            // 并保留服务提供者的部分配置，比如 版本，group，时间戳等
+                            // 最后将合并后的配置设置为 url 查询字符串中
                             urls.add(ClusterUtils.mergeUrl(url, map));
                         }
                     }
                 }
-            } else { // assemble URL from register center's configuration
-                // if protocols not injvm checkRegistry
+            } else { // assemble URL from register center's configuration   从注册中心的配置中组装 URL
+                // if protocols not injvm checkRegistry     协议不是 injvm
                 if (!LOCAL_PROTOCOL.equalsIgnoreCase(getProtocol())) {
                     checkRegistry();
+                    // 加载注册中心地址
                     List<URL> us = ConfigValidationUtils.loadRegistries(this, false);
                     if (CollectionUtils.isNotEmpty(us)) {
                         for (URL u : us) {
+                            // 加载监视器
                             URL monitorUrl = ConfigValidationUtils.loadMonitor(this, u);
                             if (monitorUrl != null) {
                                 map.put(MONITOR_KEY, URL.encode(monitorUrl.toFullString()));
                             }
+                            // 将 map 转换为查询字符串，赋值给 refer
                             urls.add(u.addParameterAndEncoded(REFER_KEY, StringUtils.toQueryString(map)));
                         }
                     }
+                    // 没有配置注册中心，抛出异常
                     if (urls.isEmpty()) {
-                        throw new IllegalStateException("No such any registry to reference " + interfaceName + " on the consumer " + NetUtils.getLocalHost() + " use dubbo version " + Version.getVersion() + ", please config <dubbo:registry address=\"...\" /> to your spring config.");
+                        throw new IllegalStateException(
+                                "No such any registry to reference " + interfaceName + " on the consumer " + NetUtils.getLocalHost() +
+                                        " use dubbo version " + Version.getVersion() +
+                                        ", please config <dubbo:registry address=\"...\" /> to your spring config.");
                     }
                 }
             }
 
+            // 只有一个注册中心或者服务提供者
             if (urls.size() == 1) {
+                // 创建 invoker 实例
                 invoker = REF_PROTOCOL.refer(interfaceClass, urls.get(0));
-            } else {
+            } else { // 多个注册中心或多个服务提供者，或者两者混合
                 List<Invoker<?>> invokers = new ArrayList<Invoker<?>>();
                 URL registryURL = null;
                 for (URL url : urls) {
                     invokers.add(REF_PROTOCOL.refer(interfaceClass, url));
                     if (UrlUtils.isRegistry(url)) {
+                        // 最后一个注册中心 URL
                         registryURL = url; // use last registry url
                     }
                 }
                 if (registryURL != null) { // registry url is available
                     // for multi-subscription scenario, use 'zone-aware' policy by default
+                    // 如果注册中心链接不为空，则将使用 ZoneAwareCluster
                     URL u = registryURL.addParameterIfAbsent(CLUSTER_KEY, ZoneAwareCluster.NAME);
                     // The invoker wrap relation would be like: ZoneAwareClusterInvoker(StaticDirectory) -> FailoverClusterInvoker(RegistryDirectory, routing happens here) -> Invoker
+                    // 创建 StaticDirectory 实例，并由 Cluster 对多个 Invoker 进行合并
                     invoker = CLUSTER.join(new StaticDirectory(u, invokers));
                 } else { // not a registry url, must be direct invoke.
                     invoker = CLUSTER.join(new StaticDirectory(invokers));
@@ -362,7 +381,8 @@ public class ReferenceConfig<T> extends ReferenceConfigBase<T> {
          * ServiceData Store
          */
         String metadata = map.get(METADATA_KEY);
-        WritableMetadataService metadataService = WritableMetadataService.getExtension(metadata == null ? DEFAULT_METADATA_STORAGE_TYPE : metadata);
+        WritableMetadataService metadataService =
+                WritableMetadataService.getExtension(metadata == null ? DEFAULT_METADATA_STORAGE_TYPE : metadata);
         if (metadataService != null) {
             URL consumerURL = new URL(CONSUMER_PROTOCOL, map.remove(REGISTER_IP_KEY), 0, map.get(INTERFACE_KEY), map);
             metadataService.publishServiceDefinition(consumerURL);
@@ -468,7 +488,8 @@ public class ReferenceConfig<T> extends ReferenceConfigBase<T> {
 
     public void appendParameters() {
         URL appendParametersUrl = URL.valueOf("appendParameters://");
-        List<AppendParametersComponent> appendParametersComponents = ExtensionLoader.getExtensionLoader(AppendParametersComponent.class).getActivateExtension(appendParametersUrl, (String[]) null);
+        List<AppendParametersComponent> appendParametersComponents = ExtensionLoader.getExtensionLoader(AppendParametersComponent.class)
+                .getActivateExtension(appendParametersUrl, (String[]) null);
         appendParametersComponents.forEach(component -> component.appendReferParameters(this));
     }
 

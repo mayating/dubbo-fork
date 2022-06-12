@@ -40,6 +40,7 @@ public class AdaptiveClassCodeGenerator {
 
     private static final String CODE_IMPORTS = "import %s;\n";
 
+    // 自适应拓展类代码
     private static final String CODE_CLASS_DECLARATION = "public class %s$Adaptive implements %s {\n";
 
     private static final String CODE_METHOD_DECLARATION = "public %s %s(%s) %s {\n%s}\n";
@@ -48,16 +49,19 @@ public class AdaptiveClassCodeGenerator {
 
     private static final String CODE_METHOD_THROWS = "throws %s";
 
-    private static final String CODE_UNSUPPORTED = "throw new UnsupportedOperationException(\"The method %s of interface %s is not adaptive method!\");\n";
+    private static final String CODE_UNSUPPORTED =
+            "throw new UnsupportedOperationException(\"The method %s of interface %s is not adaptive method!\");\n";
 
-    private static final String CODE_URL_NULL_CHECK = "if (arg%d == null) throw new IllegalArgumentException(\"url == null\");\n%s url = arg%d;\n";
+    private static final String CODE_URL_NULL_CHECK =
+            "if (arg%d == null) throw new IllegalArgumentException(\"url == null\");\n%s url = arg%d;\n";
 
     private static final String CODE_EXT_NAME_ASSIGNMENT = "String extName = %s;\n";
 
     private static final String CODE_EXT_NAME_NULL_CHECK = "if(extName == null) "
-                    + "throw new IllegalStateException(\"Failed to get extension (%s) name from url (\" + url.toString() + \") use keys(%s)\");\n";
+            + "throw new IllegalStateException(\"Failed to get extension (%s) name from url (\" + url.toString() + \") use keys(%s)\");\n";
 
-    private static final String CODE_INVOCATION_ARGUMENT_NULL_CHECK = "if (arg%d == null) throw new IllegalArgumentException(\"invocation == null\"); "
+    private static final String CODE_INVOCATION_ARGUMENT_NULL_CHECK =
+            "if (arg%d == null) throw new IllegalArgumentException(\"invocation == null\"); "
                     + "String methodName = arg%d.getMethodName();\n";
 
 
@@ -87,7 +91,8 @@ public class AdaptiveClassCodeGenerator {
     public String generate() {
         // no need to generate adaptive class since there's no adaptive method found.
         if (!hasAdaptiveMethod()) {
-            throw new IllegalStateException("No adaptive method exist on extension " + type.getName() + ", refuse to create the adaptive class!");
+            throw new IllegalStateException(
+                    "No adaptive method exist on extension " + type.getName() + ", refuse to create the adaptive class!");
         }
 
         StringBuilder code = new StringBuilder();
@@ -168,8 +173,8 @@ public class AdaptiveClassCodeGenerator {
     private String generateMethodArguments(Method method) {
         Class<?>[] pts = method.getParameterTypes();
         return IntStream.range(0, pts.length)
-                        .mapToObj(i -> String.format(CODE_METHOD_ARGUMENT, pts[i].getCanonicalName(), i))
-                        .collect(Collectors.joining(", "));
+                .mapToObj(i -> String.format(CODE_METHOD_ARGUMENT, pts[i].getCanonicalName(), i))
+                .collect(Collectors.joining(", "));
     }
 
     /**
@@ -317,8 +322,8 @@ public class AdaptiveClassCodeGenerator {
     private String generateInvocationArgumentNullCheck(Method method) {
         Class<?>[] pts = method.getParameterTypes();
         return IntStream.range(0, pts.length).filter(i -> CLASSNAME_INVOCATION.equals(pts[i].getName()))
-                        .mapToObj(i -> String.format(CODE_INVOCATION_ARGUMENT_NULL_CHECK, i, i))
-                        .findFirst().orElse("");
+                .mapToObj(i -> String.format(CODE_INVOCATION_ARGUMENT_NULL_CHECK, i, i))
+                .findFirst().orElse("");
     }
 
     /**
@@ -329,7 +334,7 @@ public class AdaptiveClassCodeGenerator {
         // value is not set, use the value generated from class name as the key
         if (value.length == 0) {
             String splitName = StringUtils.camelToSplitName(type.getSimpleName(), ".");
-            value = new String[]{splitName};
+            value = new String[] {splitName};
         }
         return value;
     }
@@ -360,7 +365,7 @@ public class AdaptiveClassCodeGenerator {
 
         // getter method not found, throw
         throw new IllegalStateException("Failed to create adaptive class for interface " + type.getName()
-                        + ": not found url parameter or url attribute in parameters of method " + method.getName());
+                + ": not found url parameter or url attribute in parameters of method " + method.getName());
 
     }
 

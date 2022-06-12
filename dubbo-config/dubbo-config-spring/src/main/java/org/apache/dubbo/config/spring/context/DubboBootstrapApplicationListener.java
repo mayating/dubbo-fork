@@ -17,7 +17,6 @@
 package org.apache.dubbo.config.spring.context;
 
 import org.apache.dubbo.config.bootstrap.DubboBootstrap;
-
 import org.springframework.context.ApplicationListener;
 import org.springframework.context.event.ApplicationContextEvent;
 import org.springframework.context.event.ContextClosedEvent;
@@ -25,6 +24,7 @@ import org.springframework.context.event.ContextRefreshedEvent;
 import org.springframework.core.Ordered;
 
 /**
+ * Dubbo 引导类应用事件监听器
  * The {@link ApplicationListener} for {@link DubboBootstrap}'s lifecycle when the {@link ContextRefreshedEvent}
  * and {@link ContextClosedEvent} raised
  *
@@ -42,17 +42,21 @@ public class DubboBootstrapApplicationListener extends OneTimeExecutionApplicati
     @Override
     public void onApplicationContextEvent(ApplicationContextEvent event) {
         if (event instanceof ContextRefreshedEvent) {
+            // 上下文刷新事件
             onContextRefreshedEvent((ContextRefreshedEvent) event);
         } else if (event instanceof ContextClosedEvent) {
+            // 上下文关闭事件
             onContextClosedEvent((ContextClosedEvent) event);
         }
     }
 
     private void onContextRefreshedEvent(ContextRefreshedEvent event) {
+        // 启动 Dubbo
         dubboBootstrap.start();
     }
 
     private void onContextClosedEvent(ContextClosedEvent event) {
+        // 停止 Dubbo
         dubboBootstrap.stop();
     }
 

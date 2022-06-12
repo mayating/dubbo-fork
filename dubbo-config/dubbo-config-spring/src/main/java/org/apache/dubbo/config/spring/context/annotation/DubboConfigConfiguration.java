@@ -16,21 +16,10 @@
  */
 package org.apache.dubbo.config.spring.context.annotation;
 
-import org.apache.dubbo.config.AbstractConfig;
-import org.apache.dubbo.config.ApplicationConfig;
-import org.apache.dubbo.config.ConsumerConfig;
-import org.apache.dubbo.config.MetadataReportConfig;
-import org.apache.dubbo.config.MetricsConfig;
-import org.apache.dubbo.config.ModuleConfig;
-import org.apache.dubbo.config.MonitorConfig;
-import org.apache.dubbo.config.ProtocolConfig;
-import org.apache.dubbo.config.ProviderConfig;
-import org.apache.dubbo.config.RegistryConfig;
-import org.apache.dubbo.config.SslConfig;
-import org.apache.dubbo.config.spring.ConfigCenterBean;
-
 import com.alibaba.spring.beans.factory.annotation.EnableConfigurationBeanBinding;
 import com.alibaba.spring.beans.factory.annotation.EnableConfigurationBeanBindings;
+import org.apache.dubbo.config.*;
+import org.apache.dubbo.config.spring.ConfigCenterBean;
 import org.springframework.context.annotation.Configuration;
 
 /**
@@ -56,6 +45,7 @@ public class DubboConfigConfiguration {
      * Single Dubbo {@link AbstractConfig Config} Bean Binding
      */
     @EnableConfigurationBeanBindings({
+            // 拿到多个注解，对每一个都去注册bean
             @EnableConfigurationBeanBinding(prefix = "dubbo.application", type = ApplicationConfig.class),
             @EnableConfigurationBeanBinding(prefix = "dubbo.module", type = ModuleConfig.class),
             @EnableConfigurationBeanBinding(prefix = "dubbo.registry", type = RegistryConfig.class),

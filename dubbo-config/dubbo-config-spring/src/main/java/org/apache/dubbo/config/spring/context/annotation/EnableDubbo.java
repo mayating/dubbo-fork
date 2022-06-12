@@ -17,15 +17,9 @@
 package org.apache.dubbo.config.spring.context.annotation;
 
 import org.apache.dubbo.config.AbstractConfig;
-
 import org.springframework.core.annotation.AliasFor;
 
-import java.lang.annotation.Documented;
-import java.lang.annotation.ElementType;
-import java.lang.annotation.Inherited;
-import java.lang.annotation.Retention;
-import java.lang.annotation.RetentionPolicy;
-import java.lang.annotation.Target;
+import java.lang.annotation.*;
 
 /**
  * Enables Dubbo components as Spring Beans, equals
@@ -41,8 +35,8 @@ import java.lang.annotation.Target;
 @Retention(RetentionPolicy.RUNTIME)
 @Inherited
 @Documented
-@EnableDubboConfig
-@DubboComponentScan
+@EnableDubboConfig // 注解1 用来将properties文件中的配置转化为对应的Bean
+@DubboComponentScan // 注解2 用来扫描服务提供者和引用者
 @EnableDubboLifecycle
 public @interface EnableDubbo {
 

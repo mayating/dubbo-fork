@@ -80,6 +80,7 @@ public class DefaultFuture extends CompletableFuture<Object> {
         this.channel = channel;
         this.request = request;
         this.id = request.getId();
+        // 默认是1s
         this.timeout = timeout > 0 ? timeout : channel.getUrl().getPositiveParameter(TIMEOUT_KEY, DEFAULT_TIMEOUT);
         // put into waiting map.
         FUTURES.put(id, this);
@@ -164,6 +165,7 @@ public class DefaultFuture extends CompletableFuture<Object> {
     }
 
     public static void received(Channel channel, Response response, boolean timeout) {
+        // 请求收到处理
         try {
             DefaultFuture future = FUTURES.remove(response.getId());
             if (future != null) {
@@ -179,6 +181,7 @@ public class DefaultFuture extends CompletableFuture<Object> {
                         + ", response " + response
                         + (channel == null ? "" : ", channel: " + channel.getLocalAddress()
                         + " -> " + channel.getRemoteAddress()));
+                // 本地地址 、 远程地址
             }
         } finally {
             CHANNELS.remove(response.getId());
@@ -187,6 +190,7 @@ public class DefaultFuture extends CompletableFuture<Object> {
 
     @Override
     public boolean cancel(boolean mayInterruptIfRunning) {
+        // 请求取消操作
         Response errorResult = new Response(id);
         errorResult.setStatus(Response.CLIENT_ERROR);
         errorResult.setErrorMessage("request future has been canceled.");
@@ -205,8 +209,10 @@ public class DefaultFuture extends CompletableFuture<Object> {
             throw new IllegalStateException("response cannot be null");
         }
         if (res.getStatus() == Response.OK) {
+            // 响应成功，则返回响应结果
             this.complete(res.getResult());
         } else if (res.getStatus() == Response.CLIENT_TIMEOUT || res.getStatus() == Response.SERVER_TIMEOUT) {
+            // 客户端超时 或 服务端超时，抛 TimeoutException
             this.completeExceptionally(new TimeoutException(res.getStatus() == Response.SERVER_TIMEOUT, channel, res.getErrorMessage()));
         } else {
             this.completeExceptionally(new RemotingException(channel, res.getErrorMessage()));
@@ -217,8 +223,8 @@ public class DefaultFuture extends CompletableFuture<Object> {
         if (executor != null && executor instanceof ThreadlessExecutor) {
             ThreadlessExecutor threadlessExecutor = (ThreadlessExecutor) executor;
             if (threadlessExecutor.isWaiting()) {
-                threadlessExecutor.notifyReturn(new IllegalStateException("The result has returned, but the biz thread is still waiting" +
-                        " which is not an expected state, interrupt the thread manually by returning an exception."));
+                threadlessExecutor.notifyReturn(new IllegalStateException("The result has returned, but the biz thread is still waiting"
+                        + " which is not an expected state, interrupt the thread manually by returning an exception."));
             }
         }
     }
@@ -248,6 +254,7 @@ public class DefaultFuture extends CompletableFuture<Object> {
     }
 
     private String getTimeoutMessage(boolean scan) {
+        // 超时消息
         long nowTimestamp = System.currentTimeMillis();
         return (sent > 0 ? "Waiting server-side response timeout" : "Sending request timeout in client-side")
                 + (scan ? " by scan timer" : "") + ". start time: "
@@ -256,7 +263,8 @@ public class DefaultFuture extends CompletableFuture<Object> {
                 + (sent > 0 ? " client elapsed: " + (sent - start)
                 + " ms, server elapsed: " + (nowTimestamp - sent)
                 : " elapsed: " + (nowTimestamp - start)) + " ms, timeout: "
-                + timeout + " ms, request: " + (logger.isDebugEnabled() ? request : getRequestWithoutData()) + ", channel: " + channel.getLocalAddress()
+                + timeout + " ms, request: " + (logger.isDebugEnabled() ? request : getRequestWithoutData()) + ", channel: "
+                + channel.getLocalAddress()
                 + " -> " + channel.getRemoteAddress();
     }
 
