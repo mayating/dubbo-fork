@@ -22,19 +22,12 @@ import org.apache.dubbo.common.logger.LoggerFactory;
 import org.apache.dubbo.common.utils.UrlUtils;
 import org.apache.dubbo.qos.common.QosConstants;
 import org.apache.dubbo.qos.server.Server;
-import org.apache.dubbo.rpc.Exporter;
-import org.apache.dubbo.rpc.Invoker;
-import org.apache.dubbo.rpc.Protocol;
-import org.apache.dubbo.rpc.ProtocolServer;
-import org.apache.dubbo.rpc.RpcException;
+import org.apache.dubbo.rpc.*;
 
 import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
 
-import static org.apache.dubbo.common.constants.QosConstants.ACCEPT_FOREIGN_IP;
-import static org.apache.dubbo.common.constants.QosConstants.QOS_ENABLE;
-import static org.apache.dubbo.common.constants.QosConstants.QOS_HOST;
-import static org.apache.dubbo.common.constants.QosConstants.QOS_PORT;
+import static org.apache.dubbo.common.constants.QosConstants.*;
 
 
 public class QosProtocolWrapper implements Protocol {
@@ -59,8 +52,11 @@ public class QosProtocolWrapper implements Protocol {
 
     @Override
     public <T> Exporter<T> export(Invoker<T> invoker) throws RpcException {
+        // invoker中的url是否为注册中心
         if (UrlUtils.isRegistry(invoker.getUrl())) {
+            // 是，则开启 QosServer
             startQosServer(invoker.getUrl());
+            // 向下调用export
             return protocol.export(invoker);
         }
         return protocol.export(invoker);

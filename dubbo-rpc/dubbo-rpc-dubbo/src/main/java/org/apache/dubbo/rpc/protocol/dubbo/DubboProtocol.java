@@ -242,22 +242,22 @@ public class DubboProtocol extends AbstractProtocol {
         // 获取 URL
         URL url = invoker.getUrl();
 
-        // export service.
+        // 获取服务标识，理解成服务坐标也行。由服务组名，服务名，服务版本号以及端口组成。比如：
+        // demoGroup/com.qqxhb.DemoService:0.0.1:20880
         String key = serviceKey(url);
-        // 创建 DubboExporter
+        // 创建DubboExporter实例并放入缓存
         DubboExporter<T> exporter = new DubboExporter<T>(invoker, key, exporterMap);
         exporterMap.put(key, exporter);
 
-        //export an stub service for dispatching event
-        // 本地存根相关
+        //export an stub service for dispatching event 导出本地存根服务以发送事件
         Boolean isStubSupportEvent = url.getParameter(STUB_EVENT_KEY, DEFAULT_STUB_EVENT);
         Boolean isCallbackservice = url.getParameter(IS_CALLBACK_SERVICE, false);
         if (isStubSupportEvent && !isCallbackservice) {
             String stubServiceMethods = url.getParameter(STUB_EVENT_METHODS_KEY);
             if (stubServiceMethods == null || stubServiceMethods.length() == 0) {
                 if (logger.isWarnEnabled()) {
-                    logger.warn(new IllegalStateException("consumer [" + url.getParameter(INTERFACE_KEY) +
-                            "], has set stubproxy support event ,but no stub methods founded."));
+                    logger.warn(new IllegalStateException("consumer [" + url.getParameter(INTERFACE_KEY)
+                            + "], has set stubproxy support event ,but no stub methods founded."));
                 }
 
             } else {
@@ -265,20 +265,22 @@ public class DubboProtocol extends AbstractProtocol {
             }
         }
 
-        // 启动本地服务
+        // 启动服务器
         openServer(url);
+        // 优化序列化
         optimizeSerialization(url);
 
         return exporter;
     }
 
     private void openServer(URL url) {
-        // find server. 获取本地服务地址    ip:port
+        // find server. 获取 host:port，并将其作为服务器实例的 key，用于标识当前的服务器实例
         String key = url.getAddress();
-        //client can export a service which's only for server to invoke
+        //client can export a service which's only for server to invoke  客户端可以导出只供服务器调用的服务，默认为true
+        // 在同一台机器上（单网卡），同一个端口上仅允许启动一个服务器实例。若某个端口上已有服务器实例，此时则调用 reset 方法重置服务器的一些配置。
         boolean isServer = url.getParameter(IS_SERVER_KEY, true);
         if (isServer) {
-            // 缓存中获取通信服务器，防止重复创建
+            // 双重检测创建服务（保证只创建一次）
             ProtocolServer server = serverMap.get(key);
             if (server == null) {
                 synchronized (this) {
@@ -298,40 +300,41 @@ public class DubboProtocol extends AbstractProtocol {
 
     private ProtocolServer createServer(URL url) {
         url = URLBuilder.from(url)
-                // send readonly event when server closes, it's enabled by default
-                // 默认开启 server 关闭时发送 READ_ONLY 事件
+                // send readonly event when server closes, it's enabled by default 服务器关闭时发送只读事件，默认情况下启用
                 .addParameterIfAbsent(CHANNEL_READONLYEVENT_SENT_KEY, Boolean.TRUE.toString())
-                // enable heartbeat by default
-                // 心跳检测
+                // enable heartbeat by default 添加默认心跳检测参数60 * 1000
                 .addParameterIfAbsent(HEARTBEAT_KEY, String.valueOf(DEFAULT_HEARTBEAT))
-                // 设置编码器为 dubbo
+                // 添加编码解码器参数
                 .addParameter(CODEC_KEY, DubboCodec.NAME)
                 .build();
         // 获取 server 类型，默认 netty
         String str = url.getParameter(SERVER_KEY, DEFAULT_REMOTING_SERVER);
 
-        // 判断对应的扩展是否存在
+        // 通过 SPI 检测是否存在 server 参数所代表的 Transporter 拓展，不存在则抛出异常
         if (str != null && str.length() > 0 && !ExtensionLoader.getExtensionLoader(Transporter.class).hasExtension(str)) {
             throw new RpcException("Unsupported server type: " + str + ", url: " + url);
         }
 
-        // 启动通信服务器
         ExchangeServer server;
         try {
+            // 创建 ExchangeServer
             server = Exchangers.bind(url, requestHandler);
         } catch (RemotingException e) {
             throw new RpcException("Fail to start server(url: " + url + ") " + e.getMessage(), e);
         }
 
-        // 判断 client 对应的扩展是否存在
+        //  获取 client 参数，可指定 netty，mina
         str = url.getParameter(CLIENT_KEY);
         if (str != null && str.length() > 0) {
+            // 通过SPI获取所有的 Transporter 实现类名称集合，比如 supportedTypes = [netty, mina]
             Set<String> supportedTypes = ExtensionLoader.getExtensionLoader(Transporter.class).getSupportedExtensions();
+            // 检测当前 Dubbo 所支持的 Transporter 实现类名称列表中， 是否包含 client 所表示的 Transporter，若不包含，则抛出异常
             if (!supportedTypes.contains(str)) {
                 throw new RpcException("Unsupported client type: " + str);
             }
         }
 
+        // 创建 DubboProtocolServer 实例并返回
         return new DubboProtocolServer(server);
     }
 

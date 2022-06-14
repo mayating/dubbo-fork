@@ -38,7 +38,7 @@ abstract class OneTimeExecutionApplicationContextEventListener implements Applic
 
     // ApplicationListener  方法重写
     public final void onApplicationEvent(ApplicationEvent event) {
-        // 匹配应用上下文事件，进入模版方法，响应事件处理
+        // 判断事件源是持有的ApplicationContextEvent，并且是应用上下文事件
         if (isOriginalEventSource(event) && event instanceof ApplicationContextEvent) {
             onApplicationContextEvent((ApplicationContextEvent) event);
         }

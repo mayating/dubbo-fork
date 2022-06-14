@@ -94,368 +94,390 @@ public abstract class Wrapper {
     private static AtomicLong WRAPPER_CLASS_COUNTER = new AtomicLong(0);
 
     /**
+     * 仅仅包含一些判断及缓存操作，主要的创建Wrapper实例是在makeWrapper中完成的。
      * get wrapper.
      *
      * @param c Class instance.
      * @return Wrapper instance(not null).
      */
     public static Wrapper getWrapper(Class<?> c) {
+        //因为无法代理动态类，因此是动态类时会循环找到不是动态类的父类
         while (ClassGenerator.isDynamicClass(c)) // can not wrapper on dynamic class.
         {
+            //获取父类
             c = c.getSuperclass();
         }
 
+        //如果代理Object类，则直接返回固定实现OBJECT_WRAPPER
         if (c == Object.class) {
             return OBJECT_WRAPPER;
         }
 
+        //代理其他类则调用makeWrapper创建一个实例，并存入缓存中（如果不存在），然后返回该包装类实例
         return WRAPPER_MAP.computeIfAbsent(c, key -> makeWrapper(key));
     }
 
-    // 基于 Javassit 封装的 ClassGenerator 类
+    // 基于 Javassit 封装的 ClassGenerator 类，对Class对象进行解析，拿到诸如类方法，类成员变量等信息，生成invokeMethod方法代码和其他一些方法代码
+    // 代码生成后，通过 Javaassist 生成 Class对象，最后再通过反射创建 Wrapper 实例。
     private static Wrapper makeWrapper(Class<?> c) {
+        // 判断是否是基本类型的包装类，如果是则抛出异常
         if (c.isPrimitive()) {
-            throw new IllegalArgumentException("Can not create wrapper for primitive type: " + c);
-        }
-
-        String name = c.getName();
-        ClassLoader cl = ClassUtils.getClassLoader(c);
-
-        StringBuilder c1 = new StringBuilder("public void setPropertyValue(Object o, String n, Object v){ ");
-        StringBuilder c2 = new StringBuilder("public Object getPropertyValue(Object o, String n){ ");
-        StringBuilder c3 = new StringBuilder("public Object invokeMethod(Object o, String n, Class[] p, Object[] v) throws " +
-                InvocationTargetException.class.getName() + "{ ");
-
-        c1.append(name).append(" w; try{ w = ((").append(name)
-                .append(")$1); }catch(Throwable e){ throw new IllegalArgumentException(e); }");
-        c2.append(name).append(" w; try{ w = ((").append(name)
-                .append(")$1); }catch(Throwable e){ throw new IllegalArgumentException(e); }");
-        c3.append(name).append(" w; try{ w = ((").append(name)
-                .append(")$1); }catch(Throwable e){ throw new IllegalArgumentException(e); }");
-
-        Map<String, Class<?>> pts = new HashMap<>(); // <property name, property types>
-        Map<String, Method> ms = new LinkedHashMap<>(); // <method desc, Method instance>
-        List<String> mns = new ArrayList<>(); // method names.
-        List<String> dmns = new ArrayList<>(); // declaring method names.
-
-        // get all public field.
-        for (Field f : c.getFields()) {
-            String fn = f.getName();
-            Class<?> ft = f.getType();
-            if (Modifier.isStatic(f.getModifiers()) || Modifier.isTransient(f.getModifiers())) {
-                continue;
+            if (c.isPrimitive()) {
+                throw new IllegalArgumentException("Can not create wrapper for primitive type: " + c);
             }
+            // 获取类的全限定名称(包名+类名)
+            String name = c.getName();
+            // 获取类加载器，优先级如下：线程上下文加载器 -> c的类加载器 -> 系统类加载器
+            ClassLoader cl = ClassUtils.getClassLoader(c);
 
-            c1.append(" if( $2.equals(\"").append(fn).append("\") ){ w.").append(fn).append("=").append(arg(ft, "$3"))
-                    .append("; return; }");
-            c2.append(" if( $2.equals(\"").append(fn).append("\") ){ return ($w)w.").append(fn).append("; }");
-            pts.put(fn, ft);
-        }
+            // 存放setPropertyValue方法代码
+            StringBuilder c1 = new StringBuilder("public void setPropertyValue(Object o, String n, Object v){ ");
+            // 存放getPropertyValue方法代码
+            StringBuilder c2 = new StringBuilder("public Object getPropertyValue(Object o, String n){ ");
+            // 存放invokeMethod方法代码
+            StringBuilder c3 = new StringBuilder("public Object invokeMethod(Object o, String n, Class[] p, Object[] v) throws " +
+                    InvocationTargetException.class.getName() + "{ ");
 
-        Method[] methods = c.getMethods();
-        // get all public method.
-        boolean hasMethod = hasMethods(methods);
-        if (hasMethod) {
-            c3.append(" try{");
-            for (Method m : methods) {
-                //ignore Object's method.
-                if (m.getDeclaringClass() == Object.class) {
+            // 生成类型转换代码及异常抛出代码
+            c1.append(name).append(" w; try{ w = ((").append(name)
+                    .append(")$1); }catch(Throwable e){ throw new IllegalArgumentException(e); }");
+            c2.append(name).append(" w; try{ w = ((").append(name)
+                    .append(")$1); }catch(Throwable e){ throw new IllegalArgumentException(e); }");
+            c3.append(name).append(" w; try{ w = ((").append(name)
+                    .append(")$1); }catch(Throwable e){ throw new IllegalArgumentException(e); }");
+
+            // 存放属性<属性名,属性类型>
+            Map<String, Class<?>> pts = new HashMap<>(); // <property name, property types>
+            // 存放方法<描述信息（可理解为方法签名）, Method 实例>
+            Map<String, Method> ms = new LinkedHashMap<>(); // <method desc, Method instance>
+            // 存放所有的方法名
+            List<String> mns = new ArrayList<>(); // method names.
+            // 所有在当前类中声明的方法名
+            List<String> dmns = new ArrayList<>(); // declaring method names.
+
+            // get all public field.
+            // 获取 public访问级别的字段
+            for (Field f : c.getFields()) {
+                String fn = f.getName();
+                Class<?> ft = f.getType();
+                if (Modifier.isStatic(f.getModifiers()) || Modifier.isTransient(f.getModifiers())) {
                     continue;
                 }
 
-                String mn = m.getName();
-                c3.append(" if( \"").append(mn).append("\".equals( $2 ) ");
-                int len = m.getParameterTypes().length;
-                c3.append(" && ").append(" $3.length == ").append(len);
+                c1.append(" if( $2.equals(\"").append(fn).append("\") ){ w.").append(fn).append("=").append(arg(ft, "$3"))
+                        .append("; return; }");
+                c2.append(" if( $2.equals(\"").append(fn).append("\") ){ return ($w)w.").append(fn).append("; }");
+                pts.put(fn, ft);
+            }
 
-                boolean override = false;
-                for (Method m2 : methods) {
-                    if (m != m2 && m.getName().equals(m2.getName())) {
-                        override = true;
-                        break;
+            Method[] methods = c.getMethods();
+            // get all public method.
+            boolean hasMethod = hasMethods(methods);
+            if (hasMethod) {
+                c3.append(" try{");
+                for (Method m : methods) {
+                    //ignore Object's method.
+                    if (m.getDeclaringClass() == Object.class) {
+                        continue;
                     }
-                }
-                if (override) {
-                    if (len > 0) {
-                        for (int l = 0; l < len; l++) {
-                            c3.append(" && ").append(" $3[").append(l).append("].getName().equals(\"")
-                                    .append(m.getParameterTypes()[l].getName()).append("\")");
+
+                    String mn = m.getName();
+                    c3.append(" if( \"").append(mn).append("\".equals( $2 ) ");
+                    int len = m.getParameterTypes().length;
+                    c3.append(" && ").append(" $3.length == ").append(len);
+
+                    boolean override = false;
+                    for (Method m2 : methods) {
+                        if (m != m2 && m.getName().equals(m2.getName())) {
+                            override = true;
+                            break;
                         }
                     }
+                    if (override) {
+                        if (len > 0) {
+                            for (int l = 0; l < len; l++) {
+                                c3.append(" && ").append(" $3[").append(l).append("].getName().equals(\"")
+                                        .append(m.getParameterTypes()[l].getName()).append("\")");
+                            }
+                        }
+                    }
+
+                    c3.append(" ) { ");
+
+                    if (m.getReturnType() == Void.TYPE) {
+                        c3.append(" w.").append(mn).append('(').append(args(m.getParameterTypes(), "$4")).append(");")
+                                .append(" return null;");
+                    } else {
+                        c3.append(" return ($w)w.").append(mn).append('(').append(args(m.getParameterTypes(), "$4")).append(");");
+                    }
+
+                    c3.append(" }");
+
+                    mns.add(mn);
+                    if (m.getDeclaringClass() == c) {
+                        dmns.add(mn);
+                    }
+                    ms.put(ReflectUtils.getDesc(m), m);
                 }
-
-                c3.append(" ) { ");
-
-                if (m.getReturnType() == Void.TYPE) {
-                    c3.append(" w.").append(mn).append('(').append(args(m.getParameterTypes(), "$4")).append(");").append(" return null;");
-                } else {
-                    c3.append(" return ($w)w.").append(mn).append('(').append(args(m.getParameterTypes(), "$4")).append(");");
-                }
-
+                c3.append(" } catch(Throwable e) { ");
+                c3.append("     throw new java.lang.reflect.InvocationTargetException(e); ");
                 c3.append(" }");
+            }
 
-                mns.add(mn);
-                if (m.getDeclaringClass() == c) {
-                    dmns.add(mn);
+            c3.append(
+                    " throw new " + NoSuchMethodException.class.getName() + "(\"Not found method \\\"\"+$2+\"\\\" in class " + c.getName() +
+                            ".\"); }");
+
+            // deal with get/set method.
+            Matcher matcher;
+            for (Map.Entry<String, Method> entry : ms.entrySet()) {
+                String md = entry.getKey();
+                Method method = entry.getValue();
+                if ((matcher = ReflectUtils.GETTER_METHOD_DESC_PATTERN.matcher(md)).matches()) {
+                    String pn = propertyName(matcher.group(1));
+                    c2.append(" if( $2.equals(\"").append(pn).append("\") ){ return ($w)w.").append(method.getName()).append("(); }");
+                    pts.put(pn, method.getReturnType());
+                } else if ((matcher = ReflectUtils.IS_HAS_CAN_METHOD_DESC_PATTERN.matcher(md)).matches()) {
+                    String pn = propertyName(matcher.group(1));
+                    c2.append(" if( $2.equals(\"").append(pn).append("\") ){ return ($w)w.").append(method.getName()).append("(); }");
+                    pts.put(pn, method.getReturnType());
+                } else if ((matcher = ReflectUtils.SETTER_METHOD_DESC_PATTERN.matcher(md)).matches()) {
+                    Class<?> pt = method.getParameterTypes()[0];
+                    String pn = propertyName(matcher.group(1));
+                    c1.append(" if( $2.equals(\"").append(pn).append("\") ){ w.").append(method.getName()).append("(").append(arg(pt, "$3"))
+                            .append("); return; }");
+                    pts.put(pn, pt);
                 }
-                ms.put(ReflectUtils.getDesc(m), m);
             }
-            c3.append(" } catch(Throwable e) { ");
-            c3.append("     throw new java.lang.reflect.InvocationTargetException(e); ");
-            c3.append(" }");
+            c1.append(" throw new " + NoSuchPropertyException.class.getName() +
+                    "(\"Not found property \\\"\"+$2+\"\\\" field or setter method in class " + c.getName() + ".\"); }");
+            c2.append(" throw new " + NoSuchPropertyException.class.getName() +
+                    "(\"Not found property \\\"\"+$2+\"\\\" field or setter method in class " + c.getName() + ".\"); }");
+
+            // make class
+            long id = WRAPPER_CLASS_COUNTER.getAndIncrement();
+            ClassGenerator cc = ClassGenerator.newInstance(cl);
+            cc.setClassName((Modifier.isPublic(c.getModifiers()) ? Wrapper.class.getName() : c.getName() + "$sw") + id);
+            cc.setSuperClass(Wrapper.class);
+
+            cc.addDefaultConstructor();
+            cc.addField("public static String[] pns;"); // property name array.
+            cc.addField("public static " + Map.class.getName() + " pts;"); // property type map.
+            cc.addField("public static String[] mns;"); // all method name array.
+            cc.addField("public static String[] dmns;"); // declared method name array.
+            for (int i = 0, len = ms.size(); i < len; i++) {
+                cc.addField("public static Class[] mts" + i + ";");
+            }
+
+            cc.addMethod("public String[] getPropertyNames(){ return pns; }");
+            cc.addMethod("public boolean hasProperty(String n){ return pts.containsKey($1); }");
+            cc.addMethod("public Class getPropertyType(String n){ return (Class)pts.get($1); }");
+            cc.addMethod("public String[] getMethodNames(){ return mns; }");
+            cc.addMethod("public String[] getDeclaredMethodNames(){ return dmns; }");
+            cc.addMethod(c1.toString());
+            cc.addMethod(c2.toString());
+            cc.addMethod(c3.toString());
+
+            try {
+                Class<?> wc = cc.toClass();
+                // setup static field.
+                wc.getField("pts").set(null, pts);
+                wc.getField("pns").set(null, pts.keySet().toArray(new String[0]));
+                wc.getField("mns").set(null, mns.toArray(new String[0]));
+                wc.getField("dmns").set(null, dmns.toArray(new String[0]));
+                int ix = 0;
+                for (Method m : ms.values()) {
+                    wc.getField("mts" + ix++).set(null, m.getParameterTypes());
+                }
+                // 实例化
+                return (Wrapper) wc.newInstance();
+            } catch (RuntimeException e) {
+                throw e;
+            } catch (Throwable e) {
+                throw new RuntimeException(e.getMessage(), e);
+            } finally {
+                // 清理缓存
+                cc.release();
+                ms.clear();
+                mns.clear();
+                dmns.clear();
+            }
         }
 
-        c3.append(" throw new " + NoSuchMethodException.class.getName() + "(\"Not found method \\\"\"+$2+\"\\\" in class " + c.getName() +
-                ".\"); }");
-
-        // deal with get/set method.
-        Matcher matcher;
-        for (Map.Entry<String, Method> entry : ms.entrySet()) {
-            String md = entry.getKey();
-            Method method = entry.getValue();
-            if ((matcher = ReflectUtils.GETTER_METHOD_DESC_PATTERN.matcher(md)).matches()) {
-                String pn = propertyName(matcher.group(1));
-                c2.append(" if( $2.equals(\"").append(pn).append("\") ){ return ($w)w.").append(method.getName()).append("(); }");
-                pts.put(pn, method.getReturnType());
-            } else if ((matcher = ReflectUtils.IS_HAS_CAN_METHOD_DESC_PATTERN.matcher(md)).matches()) {
-                String pn = propertyName(matcher.group(1));
-                c2.append(" if( $2.equals(\"").append(pn).append("\") ){ return ($w)w.").append(method.getName()).append("(); }");
-                pts.put(pn, method.getReturnType());
-            } else if ((matcher = ReflectUtils.SETTER_METHOD_DESC_PATTERN.matcher(md)).matches()) {
-                Class<?> pt = method.getParameterTypes()[0];
-                String pn = propertyName(matcher.group(1));
-                c1.append(" if( $2.equals(\"").append(pn).append("\") ){ w.").append(method.getName()).append("(").append(arg(pt, "$3"))
-                        .append("); return; }");
-                pts.put(pn, pt);
+        private static String arg (Class < ? > cl, String name){
+            if (cl.isPrimitive()) {
+                if (cl == Boolean.TYPE) {
+                    return "((Boolean)" + name + ").booleanValue()";
+                }
+                if (cl == Byte.TYPE) {
+                    return "((Byte)" + name + ").byteValue()";
+                }
+                if (cl == Character.TYPE) {
+                    return "((Character)" + name + ").charValue()";
+                }
+                if (cl == Double.TYPE) {
+                    return "((Number)" + name + ").doubleValue()";
+                }
+                if (cl == Float.TYPE) {
+                    return "((Number)" + name + ").floatValue()";
+                }
+                if (cl == Integer.TYPE) {
+                    return "((Number)" + name + ").intValue()";
+                }
+                if (cl == Long.TYPE) {
+                    return "((Number)" + name + ").longValue()";
+                }
+                if (cl == Short.TYPE) {
+                    return "((Number)" + name + ").shortValue()";
+                }
+                throw new RuntimeException("Unknown primitive type: " + cl.getName());
             }
-        }
-        c1.append(" throw new " + NoSuchPropertyException.class.getName() +
-                "(\"Not found property \\\"\"+$2+\"\\\" field or setter method in class " + c.getName() + ".\"); }");
-        c2.append(" throw new " + NoSuchPropertyException.class.getName() +
-                "(\"Not found property \\\"\"+$2+\"\\\" field or setter method in class " + c.getName() + ".\"); }");
-
-        // make class
-        long id = WRAPPER_CLASS_COUNTER.getAndIncrement();
-        ClassGenerator cc = ClassGenerator.newInstance(cl);
-        cc.setClassName((Modifier.isPublic(c.getModifiers()) ? Wrapper.class.getName() : c.getName() + "$sw") + id);
-        cc.setSuperClass(Wrapper.class);
-
-        cc.addDefaultConstructor();
-        cc.addField("public static String[] pns;"); // property name array.
-        cc.addField("public static " + Map.class.getName() + " pts;"); // property type map.
-        cc.addField("public static String[] mns;"); // all method name array.
-        cc.addField("public static String[] dmns;"); // declared method name array.
-        for (int i = 0, len = ms.size(); i < len; i++) {
-            cc.addField("public static Class[] mts" + i + ";");
+            return "(" + ReflectUtils.getName(cl) + ")" + name;
         }
 
-        cc.addMethod("public String[] getPropertyNames(){ return pns; }");
-        cc.addMethod("public boolean hasProperty(String n){ return pts.containsKey($1); }");
-        cc.addMethod("public Class getPropertyType(String n){ return (Class)pts.get($1); }");
-        cc.addMethod("public String[] getMethodNames(){ return mns; }");
-        cc.addMethod("public String[] getDeclaredMethodNames(){ return dmns; }");
-        cc.addMethod(c1.toString());
-        cc.addMethod(c2.toString());
-        cc.addMethod(c3.toString());
-
-        try {
-            Class<?> wc = cc.toClass();
-            // setup static field.
-            wc.getField("pts").set(null, pts);
-            wc.getField("pns").set(null, pts.keySet().toArray(new String[0]));
-            wc.getField("mns").set(null, mns.toArray(new String[0]));
-            wc.getField("dmns").set(null, dmns.toArray(new String[0]));
-            int ix = 0;
-            for (Method m : ms.values()) {
-                wc.getField("mts" + ix++).set(null, m.getParameterTypes());
+        private static String args (Class < ? >[]cs, String name){
+            int len = cs.length;
+            if (len == 0) {
+                return "";
             }
-            // 实例化
-            return (Wrapper) wc.newInstance();
-        } catch (RuntimeException e) {
-            throw e;
-        } catch (Throwable e) {
-            throw new RuntimeException(e.getMessage(), e);
-        } finally {
-            cc.release();
-            ms.clear();
-            mns.clear();
-            dmns.clear();
+            StringBuilder sb = new StringBuilder();
+            for (int i = 0; i < len; i++) {
+                if (i > 0) {
+                    sb.append(',');
+                }
+                sb.append(arg(cs[i], name + "[" + i + "]"));
+            }
+            return sb.toString();
         }
-    }
 
-    private static String arg(Class<?> cl, String name) {
-        if (cl.isPrimitive()) {
-            if (cl == Boolean.TYPE) {
-                return "((Boolean)" + name + ").booleanValue()";
-            }
-            if (cl == Byte.TYPE) {
-                return "((Byte)" + name + ").byteValue()";
-            }
-            if (cl == Character.TYPE) {
-                return "((Character)" + name + ").charValue()";
-            }
-            if (cl == Double.TYPE) {
-                return "((Number)" + name + ").doubleValue()";
-            }
-            if (cl == Float.TYPE) {
-                return "((Number)" + name + ").floatValue()";
-            }
-            if (cl == Integer.TYPE) {
-                return "((Number)" + name + ").intValue()";
-            }
-            if (cl == Long.TYPE) {
-                return "((Number)" + name + ").longValue()";
-            }
-            if (cl == Short.TYPE) {
-                return "((Number)" + name + ").shortValue()";
-            }
-            throw new RuntimeException("Unknown primitive type: " + cl.getName());
+        private static String propertyName (String pn){
+            return pn.length() == 1 || Character.isLowerCase(pn.charAt(1)) ? Character.toLowerCase(pn.charAt(0)) + pn.substring(1) : pn;
         }
-        return "(" + ReflectUtils.getName(cl) + ")" + name;
-    }
 
-    private static String args(Class<?>[] cs, String name) {
-        int len = cs.length;
-        if (len == 0) {
-            return "";
-        }
-        StringBuilder sb = new StringBuilder();
-        for (int i = 0; i < len; i++) {
-            if (i > 0) {
-                sb.append(',');
+        private static boolean hasMethods (Method[]methods){
+            if (methods == null || methods.length == 0) {
+                return false;
             }
-            sb.append(arg(cs[i], name + "[" + i + "]"));
-        }
-        return sb.toString();
-    }
-
-    private static String propertyName(String pn) {
-        return pn.length() == 1 || Character.isLowerCase(pn.charAt(1)) ? Character.toLowerCase(pn.charAt(0)) + pn.substring(1) : pn;
-    }
-
-    private static boolean hasMethods(Method[] methods) {
-        if (methods == null || methods.length == 0) {
+            for (Method m : methods) {
+                if (m.getDeclaringClass() != Object.class) {
+                    return true;
+                }
+            }
             return false;
         }
-        for (Method m : methods) {
-            if (m.getDeclaringClass() != Object.class) {
-                return true;
+
+        /**
+         * get property name array.
+         *
+         * @return property name array.
+         */
+        abstract public String[] getPropertyNames ();
+
+        /**
+         * get property type.
+         *
+         * @param pn property name.
+         * @return Property type or nul.
+         */
+        abstract public Class<?> getPropertyType (String pn);
+
+        /**
+         * has property.
+         *
+         * @param name property name.
+         * @return has or has not.
+         */
+        abstract public boolean hasProperty (String name);
+
+        /**
+         * get property value.
+         *
+         * @param instance instance.
+         * @param pn       property name.
+         * @return value.
+         */
+        abstract public Object getPropertyValue (Object instance, String pn) throws NoSuchPropertyException, IllegalArgumentException;
+
+        /**
+         * set property value.
+         *
+         * @param instance instance.
+         * @param pn       property name.
+         * @param pv       property value.
+         */
+        abstract public void setPropertyValue (Object instance, String pn, Object pv) throws
+        NoSuchPropertyException, IllegalArgumentException;
+
+        /**
+         * get property value.
+         *
+         * @param instance instance.
+         * @param pns      property name array.
+         * @return value array.
+         */
+        public Object[] getPropertyValues (Object instance, String[]pns) throws NoSuchPropertyException, IllegalArgumentException {
+            Object[] ret = new Object[pns.length];
+            for (int i = 0; i < ret.length; i++) {
+                ret[i] = getPropertyValue(instance, pns[i]);
+            }
+            return ret;
+        }
+
+        /**
+         * set property value.
+         *
+         * @param instance instance.
+         * @param pns      property name array.
+         * @param pvs      property value array.
+         */
+        public void setPropertyValues (Object instance, String[]pns, Object[]pvs) throws NoSuchPropertyException, IllegalArgumentException {
+            if (pns.length != pvs.length) {
+                throw new IllegalArgumentException("pns.length != pvs.length");
+            }
+
+            for (int i = 0; i < pns.length; i++) {
+                setPropertyValue(instance, pns[i], pvs[i]);
             }
         }
-        return false;
-    }
 
-    /**
-     * get property name array.
-     *
-     * @return property name array.
-     */
-    abstract public String[] getPropertyNames();
+        /**
+         * get method name array.
+         *
+         * @return method name array.
+         */
+        abstract public String[] getMethodNames ();
 
-    /**
-     * get property type.
-     *
-     * @param pn property name.
-     * @return Property type or nul.
-     */
-    abstract public Class<?> getPropertyType(String pn);
+        /**
+         * get method name array.
+         *
+         * @return method name array.
+         */
+        abstract public String[] getDeclaredMethodNames ();
 
-    /**
-     * has property.
-     *
-     * @param name property name.
-     * @return has or has not.
-     */
-    abstract public boolean hasProperty(String name);
-
-    /**
-     * get property value.
-     *
-     * @param instance instance.
-     * @param pn       property name.
-     * @return value.
-     */
-    abstract public Object getPropertyValue(Object instance, String pn) throws NoSuchPropertyException, IllegalArgumentException;
-
-    /**
-     * set property value.
-     *
-     * @param instance instance.
-     * @param pn       property name.
-     * @param pv       property value.
-     */
-    abstract public void setPropertyValue(Object instance, String pn, Object pv) throws NoSuchPropertyException, IllegalArgumentException;
-
-    /**
-     * get property value.
-     *
-     * @param instance instance.
-     * @param pns      property name array.
-     * @return value array.
-     */
-    public Object[] getPropertyValues(Object instance, String[] pns) throws NoSuchPropertyException, IllegalArgumentException {
-        Object[] ret = new Object[pns.length];
-        for (int i = 0; i < ret.length; i++) {
-            ret[i] = getPropertyValue(instance, pns[i]);
-        }
-        return ret;
-    }
-
-    /**
-     * set property value.
-     *
-     * @param instance instance.
-     * @param pns      property name array.
-     * @param pvs      property value array.
-     */
-    public void setPropertyValues(Object instance, String[] pns, Object[] pvs) throws NoSuchPropertyException, IllegalArgumentException {
-        if (pns.length != pvs.length) {
-            throw new IllegalArgumentException("pns.length != pvs.length");
-        }
-
-        for (int i = 0; i < pns.length; i++) {
-            setPropertyValue(instance, pns[i], pvs[i]);
-        }
-    }
-
-    /**
-     * get method name array.
-     *
-     * @return method name array.
-     */
-    abstract public String[] getMethodNames();
-
-    /**
-     * get method name array.
-     *
-     * @return method name array.
-     */
-    abstract public String[] getDeclaredMethodNames();
-
-    /**
-     * has method.
-     *
-     * @param name method name.
-     * @return has or has not.
-     */
-    public boolean hasMethod(String name) {
-        for (String mn : getMethodNames()) {
-            if (mn.equals(name)) {
-                return true;
+        /**
+         * has method.
+         *
+         * @param name method name.
+         * @return has or has not.
+         */
+        public boolean hasMethod (String name){
+            for (String mn : getMethodNames()) {
+                if (mn.equals(name)) {
+                    return true;
+                }
             }
+            return false;
         }
-        return false;
-    }
 
-    /**
-     * invoke method.
-     *
-     * @param instance instance.
-     * @param mn       method name.
-     * @param types
-     * @param args     argument array.
-     * @return return value.
-     */
-    abstract public Object invokeMethod(Object instance, String mn, Class<?>[] types, Object[] args)
+        /**
+         * invoke method.
+         *
+         * @param instance instance.
+         * @param mn       method name.
+         * @param types
+         * @param args     argument array.
+         * @return return value.
+         */
+        abstract public Object invokeMethod (Object instance, String mn, Class < ?>[]types, Object[]args)
             throws NoSuchMethodException, InvocationTargetException;
-}
+    }

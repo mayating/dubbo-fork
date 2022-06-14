@@ -36,6 +36,7 @@ public class DubboBootstrapApplicationListener extends OneTimeExecutionApplicati
     private final DubboBootstrap dubboBootstrap;
 
     public DubboBootstrapApplicationListener() {
+        // 获取 DubboBootstrap 实例
         this.dubboBootstrap = DubboBootstrap.getInstance();
     }
 

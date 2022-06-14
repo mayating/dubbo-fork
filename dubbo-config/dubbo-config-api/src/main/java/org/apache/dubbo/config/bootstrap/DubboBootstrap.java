@@ -148,6 +148,7 @@ public class DubboBootstrap extends GenericEventListener {
     private List<CompletableFuture<Object>> asyncReferringFutures = new ArrayList<>();
 
     /**
+     * 加锁构造单例
      * See {@link ApplicationModel} and {@link ExtensionLoader} for why DubboBootstrap is designed to be singleton.
      */
     public static synchronized DubboBootstrap getInstance() {
@@ -157,10 +158,13 @@ public class DubboBootstrap extends GenericEventListener {
         return instance;
     }
 
+    // 私有化构造函数，保证只能被自己实例化
     private DubboBootstrap() {
+        // 通过SPI方式获取环境管理和环境配置实例，见 FrameworkExt 接口
         configManager = ApplicationModel.getConfigManager();
         environment = ApplicationModel.getEnvironment();
 
+        // 注册 shutdown 事件，回调 DubboBootstrap的destroy方法，销毁所有导出及引用的服务等
         DubboShutdownHook.getDubboShutdownHook().register();
         ShutdownHookCallbacks.INSTANCE.addCallback(new ShutdownHookCallback() {
             @Override
@@ -475,27 +479,27 @@ public class DubboBootstrap extends GenericEventListener {
      * Initialize
      */
     private void initialize() {
-        // 已经初始化，直接return
+        // 原子操作确保只初始化一次。已经初始化，直接return
         if (!initialized.compareAndSet(false, true)) {
             return;
         }
 
-        // 初始化 FrameworkExt
+        // 初始化Dubbo组件的生命周期，这里主要是对环境配置初始化。初始化 FrameworkExt
         ApplicationModel.iniFrameworkExts();
 
-        // 开启配置中心
+        // 开始构建配置中心
         startConfigCenter();
 
-        // 如果有需要，将注册中心作为配置中心
+        // 如果是zookeeper作为注册中心且没有指定配置中心时，使用注册中心做配置中心
         useRegistryAsConfigCenterIfNecessary();
 
         // 开启元数据上报
         startMetadataReport();
 
-        // 加载远程配置
+        // 加载协议ID到协议配置中、并加载注册id到注册中心配置
         loadRemoteConfigs();
 
-        // 检查全局配置
+        // 全局配置校验（应用、元数据、提供者、消费者、监控等）
         checkGlobalConfigs();
 
         // 初始化元数据服务
@@ -504,7 +508,7 @@ public class DubboBootstrap extends GenericEventListener {
         // 初始化元数据服务暴露器
         initMetadataServiceExporter();
 
-        // 初始化事件监听器
+        // 初始化事件监听器（将当前实例添加到事件监听器中）
         initEventListener();
 
         if (logger.isInfoEnabled()) {
@@ -690,24 +694,26 @@ public class DubboBootstrap extends GenericEventListener {
      * Start the bootstrap
      */
     public DubboBootstrap start() {
-        // 如果 started 原值是 false，则将其设置为 true。比较并设值，多线程。
+        // 原子操作，保证只启动一次。如果 started 原值是 false，则将其设置为 true。比较并设值，多线程。
         if (started.compareAndSet(false, true)) {
-            // 初始化
+            // 1.初始化操作
             initialize();
             if (logger.isInfoEnabled()) {
                 logger.info(NAME + " is starting...");
             }
-            // 1. export Dubbo Services Dubbo服务暴露
+            // 2.导出dubbo服务（最终调用ServiceConfig的export方法）
             exportServices();
 
-            // Not only provider register
+            // Not only provider register 不仅仅是注册服务提供者或者已经导出元数据
             if (!isOnlyRegisterProvider() || hasExportedServices()) {
-                // 2. export MetadataService
+                // export MetadataService 导出元数据服务（最终构建了ServiceConfig实例，然后调用export方法）
                 exportMetadataService();
-                //3. Register the local ServiceInstance if required
+                // Register the local ServiceInstance if required
+                // 如果有则需要注册本地服务实例，通过SPI方式获取服务发现注册中心，然后调用他们的注册方法（默认自适应拓展实现是zookeeper）
                 registerServiceInstance();
             }
 
+            // 3.执行服务引入
             referServices();
 
             if (logger.isInfoEnabled()) {
@@ -859,16 +865,18 @@ public class DubboBootstrap extends GenericEventListener {
         // 循环配置中的 service
         configManager.getServices().forEach(sc -> {
             // TODO, compatible with ServiceConfig.export()
+            //设置ServiceConfig的启动器为当前实例
             ServiceConfig serviceConfig = (ServiceConfig) sc;
             serviceConfig.setBootstrap(this);
-            // 异步暴露
             if (exportAsync) {
+                //异步导出，将导出任务提交到线程池异步完成
                 ExecutorService executor = executorRepository.getServiceExporterExecutor();
                 Future<?> future = executor.submit(() -> {
                     sc.export();
                 });
                 asyncExportingFutures.add(future);
-            } else { // 调用 ServiceConfig 的 export() 方法暴露服务，并加入 Map 记录
+            } else {
+                //同步导出 则直接调用ServiceConfig的导出方法
                 sc.export();
                 exportedServices.add(sc);
             }
@@ -929,22 +937,31 @@ public class DubboBootstrap extends GenericEventListener {
     }
 
     private void registerServiceInstance() {
+        //判断是否有ServiceDiscoveryRegistry，有则通过他获取ServiceDiscovery放入集合中
         if (CollectionUtils.isEmpty(getServiceDiscoveries())) {
+            //没有则直接返回
             return;
         }
 
+        // 获取应用配置
         ApplicationConfig application = getApplication();
 
+        //从配置中获取服务名称
         String serviceName = application.getName();
 
+        //获取元数据导出地址
         URL exportedURL = selectMetadataServiceExportedURL();
 
+        //获取主机
         String host = exportedURL.getHost();
 
+        //获取端口
         int port = exportedURL.getPort();
 
+        //根据名称主机和端口创建DefaultServiceInstance实例
         ServiceInstance serviceInstance = createServiceInstance(serviceName, host, port);
 
+        //获取服务发现中心调用注册方法，注册服务实例 SPI serviceDiscovery 服务发现中心
         getServiceDiscoveries().forEach(serviceDiscovery -> serviceDiscovery.register(serviceInstance));
     }
 

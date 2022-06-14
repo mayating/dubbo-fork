@@ -23,7 +23,9 @@ import org.apache.dubbo.rpc.ProtocolServer;
 
 public class DubboProtocolServer implements ProtocolServer {
 
+    // 远程服务器
     private RemotingServer server;
+    // 地址
     private String address;
 
     public DubboProtocolServer(RemotingServer server) {
